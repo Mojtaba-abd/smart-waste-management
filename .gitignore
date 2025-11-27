@@ -2,3 +2,4 @@
 .env.local
 serviceAccountKey.json
 firebase-config.json
+node_modules/
