@@ -1,0 +1,52 @@
+{
+  "trained_at": "2025-12-06T12:23:04.721050",
+  "feature_columns": [
+    "fill_level",
+    "fill_rate",
+    "fill_rate_rolling_mean",
+    "fill_rate_rolling_std",
+    "hour",
+    "weekday",
+    "is_weekend"
+  ],
+  "target_column": "time_to_full_hours",
+  "model_type": "RandomForestRegressor",
+  "metrics": {
+    "train_mae": 34.35656581745906,
+    "train_rmse": 61.783009630608085,
+    "train_r2": 0.5506086301420928,
+    "val_mae": 45.18874252165319,
+    "val_rmse": 77.96019688700969,
+    "val_r2": 0.21057574818726255,
+    "feature_importance": [
+      {
+        "feature": "fill_level",
+        "importance": 0.2253321343517339
+      },
+      {
+        "feature": "fill_rate_rolling_mean",
+        "importance": 0.21460439159487132
+      },
+      {
+        "feature": "fill_rate",
+        "importance": 0.20784851957431802
+      },
+      {
+        "feature": "fill_rate_rolling_std",
+        "importance": 0.1615672727796039
+      },
+      {
+        "feature": "hour",
+        "importance": 0.12448316270948041
+      },
+      {
+        "feature": "weekday",
+        "importance": 0.05619164438654074
+      },
+      {
+        "feature": "is_weekend",
+        "importance": 0.009972874603451587
+      }
+    ]
+  }
+}
