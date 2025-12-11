@@ -1,13 +1,16 @@
 <script setup>
 import { ArrowRight, Leaf, Map, Wifi, Users, Github, Linkedin, Cpu, TrendingUp, MapPin, Clock, Sparkles, Zap, BarChart3 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
-import { onMounted } from 'vue'
+import { onMounted ,ref} from 'vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-
+import heroBg from '@/assets/images/Litterbin-04-2560x1440.jpg'
 const router = useRouter()
 const navigateToDashboard = () => router.push('/dashboard')
+// Mobile Menu State
+const isMobileMenuOpen = ref(false)
+const toggleMobileMenu = () => isMobileMenuOpen.value = !isMobileMenuOpen.value
 
 // Simple scroll animation
 onMounted(() => {
@@ -28,13 +31,37 @@ onMounted(() => {
 })
 
 // Team members
+// Team members data
 const teamMembers = [
-  { name: "Mujtaba", role: "Lead Developer & Architect", github: "#", linkedin: "#" },
-  { name: "Hussein", role: "Hardware & IoT Specialist", github: "#", linkedin: "#" },
-  { name: "Mustafa", role: "Hardware & IoT Specialist", github: "#", linkedin: "#" },
-  { name: "Zanib", role: "Project Manager & Research", github: "#", linkedin: "#" }
+  {
+    name: "Mujtaba",
+    role: "Lead Developer & Architect",
+    image: "/images/team/mujtaba.jpg", // <--- Add your image path here
+    github: "#",
+    linkedin: "#"
+  },
+  {
+    name: "Hussein",
+    role: "Hardware & IoT Specialist",
+    image: "/images/team/hussein.jpg",
+    github: "#",
+    linkedin: "#"
+  },
+  {
+    name: "Mustafa",
+    role: "Hardware & IoT Specialist",
+    image: "/images/team/mustafa.jpg",
+    github: "#",
+    linkedin: "#"
+  },
+  {
+    name: "Zanib",
+    role: "Project Manager & Research",
+    image: "/images/team/zanib.jpg",
+    github: "#",
+    linkedin: "#"
+  }
 ]
-
 // Features with enhanced icons
 const features = [
   {
@@ -80,176 +107,113 @@ const features = [
   <div class="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-black text-white">
 
     <!-- Navigation -->
-    <nav class="fixed top-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-xl border-b border-emerald-500/20">
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-xl border-b border-white/10">
       <div class="container mx-auto px-6 py-4">
         <div class="flex items-center justify-between">
-          <!-- Logo -->
-          <div class="flex items-center gap-3">
-            <div class="relative">
-              <div class="w-10 h-10 bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-xl flex items-center justify-center text-gray-900 font-bold text-lg shadow-lg shadow-emerald-500/50">
-                E
-              </div>
-              <div class="absolute inset-0 bg-emerald-400/20 blur-xl rounded-xl"></div>
-            </div>
-            <span class="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">Enki</span>
-          </div>
 
-          <!-- Navigation Links -->
-          <div class="hidden md:flex items-center gap-8">
+          <div class="flex items-center gap-3 cursor-pointer" @click="router.push('/')">
+            <span class="text-6xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400
+              bg-clip-text text-transparent font-kihim inline-block py-4 pr-6 pl-2 leading-relaxed -my-4">
+              Enki
+            </span>
+          </div>          <div class="hidden md:flex items-center gap-8">
             <a href="#" class="text-white font-medium hover:text-emerald-400 transition">Home</a>
             <a href="#features" class="text-gray-400 hover:text-emerald-400 transition">Features</a>
             <a href="#team" class="text-gray-400 hover:text-emerald-400 transition">Team</a>
-            <a href="#" class="text-gray-400 hover:text-emerald-400 transition">Contact</a>
           </div>
 
-          <!-- Actions -->
-          <div class="flex items-center gap-3">
-            <Button variant="ghost" class="hidden md:block text-gray-400 hover:text-white">
-              Log in
-            </Button>
-            <Button
-              @click="navigateToDashboard"
-              class="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white shadow-lg shadow-emerald-500/50"
-            >
+          <div class="hidden md:flex items-center gap-3">
+            <Button @click="navigateToDashboard" class="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white shadow-lg shadow-emerald-500/20 border-0">
               Get started
             </Button>
           </div>
+
+          <button @click="toggleMobileMenu" class="md:hidden text-gray-300 hover:text-white">
+            <Menu v-if="!isMobileMenuOpen" class="w-7 h-7" />
+            <X v-else class="w-7 h-7" />
+          </button>
         </div>
+      </div>
+
+      <div v-if="isMobileMenuOpen" class="md:hidden absolute top-full left-0 w-full bg-gray-950 border-b border-gray-800 p-6 flex flex-col gap-4 animate-in slide-in-from-top-5">
+        <a href="#" @click="isMobileMenuOpen = false" class="text-lg font-medium hover:text-emerald-400">Home</a>
+        <a href="#features" @click="isMobileMenuOpen = false" class="text-lg font-medium hover:text-emerald-400">Features</a>
+        <a href="#team" @click="isMobileMenuOpen = false" class="text-lg font-medium hover:text-emerald-400">Team</a>
+        <Button @click="navigateToDashboard" class="w-full bg-emerald-600 mt-2">Get Started</Button>
       </div>
     </nav>
 
     <!-- Hero Section with Grid Background -->
     <section class="relative pt-32 pb-20 overflow-hidden">
-      <!-- Animated Grid Background -->
-      <div class="absolute inset-0 bg-[linear-gradient(to_right,#10b98120_1px,transparent_1px),linear-gradient(to_bottom,#10b98120_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_110%)]"></div>
 
-      <!-- Glowing Orbs -->
-      <div class="absolute top-40 left-20 w-96 h-96 bg-emerald-500/30 rounded-full blur-[128px]"></div>
-      <div class="absolute top-60 right-20 w-96 h-96 bg-cyan-500/20 rounded-full blur-[128px]"></div>
+      <div class="absolute inset-0 bg-[linear-gradient(to_right,#10b98110_1px,transparent_1px),linear-gradient(to_bottom,#10b98110_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
+
+      <div class="absolute top-20 left-1/4 w-96 h-96 bg-emerald-500/20 rounded-full blur-[128px]"></div>
+      <div class="absolute bottom-20 right-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-[128px]"></div>
 
       <div class="container mx-auto px-6 relative z-10">
-        <div class="grid lg:grid-cols-2 gap-12 items-center min-h-[600px]">
+        <div class="grid lg:grid-cols-2 gap-16 items-center">
 
-          <!-- Left Content -->
-          <div class="space-y-8" data-animate="fade-up">
-            <Badge variant="outline" class="border-emerald-500/50 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20">
-              <Sparkles class="w-3 h-3 mr-1" />
-              AI-Powered Waste Management
-            </Badge>
+          <div class="space-y-8 text-center lg:text-left" data-animate>
+            <badge variant="outline" class="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 px-4 py-1">
+              <sparkles class="w-3 h-3 mr-2" /> #1 smart city solution
+            </badge>
 
-            <h1 class="text-6xl md:text-7xl font-bold leading-tight">
-              <span class="bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-                Smart Waste
-              </span>
-              <br />
-              <span class="bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                Management System
-              </span>
+            <h1 class="text-5xl md:text-7xl font-bold leading-tight tracking-tight">
+              <span class="text-white">smart waste</span> <br />
+              <span class="bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent">management system</span>
             </h1>
 
-            <p class="text-xl text-gray-400 max-w-xl leading-relaxed">
-              Revolutionary AI-powered solution using IoT sensors and predictive analytics to optimize collection routes, reduce costs by 40%, and minimize environmental impact.
+            <p class="text-lg md:text-xl text-gray-400 leading-relaxed max-w-2xl mx-auto lg:mx-0">
+              revolutionary ai-powered solution using iot sensors to optimize routes, reduce costs by 40%, and create cleaner cities.
             </p>
 
-            <!-- CTA Buttons -->
-            <div class="flex flex-col sm:flex-row gap-4 pt-4">
-              <Button
-                @click="navigateToDashboard"
-                size="lg"
-                class="group bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white shadow-2xl shadow-emerald-500/50 text-lg"
-              >
-                Live Demo
-                <ArrowRight class="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-              </Button>
-
-              <Button
-                size="lg"
-                variant="outline"
-                class="border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 text-lg"
-              >
-                Get in Touch
-              </Button>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start pt-4">
+              <button @click="navigatetodashboard" size="lg" class="bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl shadow-emerald-500/20 text-lg px-8 h-12 rounded-full">
+                live demo <arrowright class="w-5 h-5 ml-2" />
+              </button>
+              <button size="lg" variant="outline" class="border-gray-700 text-gray-300 hover:bg-white/5 hover:text-white text-lg px-8 h-12 rounded-full">
+                contact us
+              </button>
             </div>
 
-            <!-- Stats Pills -->
-            <div class="flex flex-wrap gap-4 pt-4">
-              <div class="px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-full backdrop-blur-sm">
-                <span class="text-emerald-400 font-bold">25+</span>
-                <span class="text-gray-400 ml-2 text-sm">Active Bins</span>
-              </div>
-              <div class="px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-full backdrop-blur-sm">
-                <span class="text-cyan-400 font-bold">40%</span>
-                <span class="text-gray-400 ml-2 text-sm">Cost Reduction</span>
-              </div>
-              <div class="px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-full backdrop-blur-sm">
-                <span class="text-violet-400 font-bold">95%</span>
-                <span class="text-gray-400 ml-2 text-sm">Accuracy</span>
-              </div>
+            <div class="flex flex-wrap justify-center lg:justify-start gap-6 pt-6 border-t border-white/5">
+              <div><p class="text-2xl font-bold text-white">40%</p><p class="text-sm text-gray-500">cost reduced</p></div>
+              <div><p class="text-2xl font-bold text-white">95%</p><p class="text-sm text-gray-500">accuracy</p></div>
+              <div><p class="text-2xl font-bold text-white">24/7</p><p class="text-sm text-gray-500">monitoring</p></div>
             </div>
           </div>
 
-          <!-- Right Side - Hero Image Card -->
-          <div class="relative" data-animate="fade-up">
-            <Card class="overflow-hidden border-gray-800 bg-gray-900/50 backdrop-blur-xl shadow-2xl">
-              <div class="relative">
-                <img
-                  src="/src/assets/images/Litterbin-04-2560x1440.jpg"
-                  alt="Smart Waste Bins"
-                  class="w-full h-[500px] object-cover"
-                />
-                <div class="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/50 to-transparent"></div>
+          <div class="relative hidden lg:block" data-animate>
+            <div class="relative rounded-2xl border border-gray-700 bg-gray-800/50 backdrop-blur-sm p-2 shadow-2xl transform rotate-1 hover:rotate-0 transition duration-500">
+               <img :src="heroBg" alt="smart waste dashboard" class="w-full h-[500px] object-cover rounded-xl shadow-inner" />
 
-                <!-- Floating Info Card -->
-                <Card class="absolute bottom-6 left-6 right-6 border-gray-800 bg-gray-950/90 backdrop-blur-xl">
-                  <CardContent class="p-4">
-                    <p class="text-xs font-semibold text-emerald-400 mb-2">LIVE STATUS</p>
-                    <div class="flex items-center gap-3">
-                      <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/50">
-                        <Map class="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <h3 class="font-bold text-white">Smart Collection Route</h3>
-                        <p class="text-sm text-gray-400">Optimized in real-time</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </Card>
-
-            <!-- Decorative Glow -->
-            <div class="absolute -inset-4 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 blur-3xl -z-10"></div>
+               <div class="absolute bottom-8 left-8 right-8 bg-gray-900/90 backdrop-blur-md p-4 rounded-xl border border-gray-700 shadow-xl flex items-center gap-4">
+                  <div class="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                    <wifi class="w-6 h-6 text-emerald-400 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-white">system active</h3>
+                    <p class="text-sm text-emerald-400">collecting real-time data...</p>
+                  </div>
+               </div>
+            </div>
           </div>
+
         </div>
       </div>
     </section>
-
     <!-- Tech Stack Section -->
-    <section class="py-16 relative">
-      <div class="container mx-auto px-6">
-        <Card class="border-gray-800 bg-gray-900/50 backdrop-blur-xl" data-animate="fade-up">
-          <CardContent class="p-12">
-            <div class="text-center mb-8">
-              <Badge variant="outline" class="border-gray-700 text-gray-400 mb-4">
-                POWERED BY CUTTING-EDGE TECHNOLOGY
-              </Badge>
-              <h2 class="text-3xl font-bold">
-                <span class="text-white">Built with </span>
-                <span class="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">modern tech stack</span>
-              </h2>
-            </div>
-
-            <div class="flex flex-wrap justify-center items-center gap-12 opacity-60 hover:opacity-100 transition-opacity duration-500">
-              <div class="flex items-center gap-2 text-xl font-bold text-gray-300">
-                <Cpu class="w-7 h-7 text-emerald-400" /> ESP32
-              </div>
-              <div class="text-xl font-bold text-gray-300">🔥 Firebase</div>
-              <div class="text-xl font-bold text-gray-300">🟢 Vue.js</div>
-              <div class="text-xl font-bold text-gray-300">🗺️ Leaflet</div>
-              <div class="text-xl font-bold text-gray-300">🤖 Python ML</div>
-            </div>
-          </CardContent>
-        </Card>
+    <section class="py-10 border-y border-white/5 bg-black/20">
+      <div class="container mx-auto px-6 text-center">
+        <p class="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-8">Powered by Modern Technology</p>
+        <div class="flex flex-wrap justify-center gap-8 md:gap-16 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
+             <div class="flex items-center gap-2 text-xl font-bold text-white"><Cpu class="text-emerald-500"/> ESP32</div>
+             <div class="flex items-center gap-2 text-xl font-bold text-white">Firebase</div>
+             <div class="flex items-center gap-2 text-xl font-bold text-white">Vue.js</div>
+             <div class="flex items-center gap-2 text-xl font-bold text-white">Leaflet</div>
+             <div class="flex items-center gap-2 text-xl font-bold text-white">AI/ML</div>
+        </div>
       </div>
     </section>
 
@@ -372,47 +336,18 @@ const features = [
       </div>
     </section>
 
-    <!-- CTA Section -->
-    <section class="py-20 relative overflow-hidden">
-      <div class="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10"></div>
-      <div class="container mx-auto px-6 relative z-10">
-        <Card class="border-emerald-500/50 bg-gradient-to-br from-gray-900 to-gray-950 backdrop-blur-xl" data-animate="fade-up">
-          <CardContent class="p-12 text-center">
-            <h2 class="text-4xl md:text-5xl font-bold text-white mb-6">
-              Ready to revolutionize
-              <br />
-              <span class="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">waste management?</span>
-            </h2>
-
-            <p class="text-gray-400 text-lg mb-8 max-w-2xl mx-auto">
-              Join the smart cities revolution. Reduce costs, minimize environmental impact, and optimize operations with AI-powered insights.
-            </p>
-
-            <Button
-              @click="navigateToDashboard"
-              size="lg"
-              class="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white shadow-2xl shadow-emerald-500/50"
-            >
-              Start now
-              <ArrowRight class="w-5 h-5 ml-2" />
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    </section>
-
     <!-- Footer -->
     <footer class="border-t border-gray-800 py-12 bg-gray-950">
       <div class="container mx-auto px-6">
         <div class="flex flex-col md:flex-row justify-between items-center mb-8">
           <div class="mb-6 md:mb-0">
             <div class="flex items-center gap-3 mb-3">
-              <div class="w-10 h-10 bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-xl flex items-center justify-center text-gray-900 font-bold shadow-lg shadow-emerald-500/50">
-                E
-              </div>
-              <span class="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">Enki</span>
+            <span class="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400
+              bg-clip-text text-transparent font-kihim inline-block py-4 pr-6 pl-2 leading-relaxed -my-4">
+              Enki
+            </span>
             </div>
-            <p class="text-gray-500 text-sm">© 2024 Team Enki. All rights reserved.</p>
+            <p class="text-gray-500 text-sm">© 2026 Team Enki. All rights reserved.</p>
           </div>
 
           <div class="flex gap-8">
