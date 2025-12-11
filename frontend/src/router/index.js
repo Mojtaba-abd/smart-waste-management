@@ -1,21 +1,23 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import DashboardView from '@/views/DashboardView.vue'
+// src/router/index.js
 
-const routes = [
-  {
-    path: '/',
-    redirect: '/dashboard', // redirect / to /dashboard
-  },
-  {
-    path: '/dashboard',
-    name: 'Dashboard',
-    component: DashboardView,
-  },
-]
+import { createRouter, createWebHistory } from 'vue-router'
+import HomeView from '@/views/HomeView.vue'
+import DashboardView from '@/views/DashboardView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes,
+  routes: [
+    {
+      path: '/',
+      name: 'home',
+      component: HomeView,
+    },
+    {
+      path: '/dashboard',
+      name: 'dashboard',
+      component: DashboardView,
+    },
+  ],
 })
 
 export default router

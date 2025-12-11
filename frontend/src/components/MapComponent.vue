@@ -4,11 +4,10 @@ import { initializeApp } from 'firebase/app'
 import { getDatabase, ref as dbRef, onValue } from 'firebase/database'
 import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import 'leaflet-polylinedecorator' // Used for route arrows
+import 'leaflet-polylinedecorator'
 
-// --- State Definitions ---
+// --- State ---
 const showRoute = ref(true)
-const autoRefresh = ref(true) // Not used yet, but kept for future controls
 const map = ref(null)
 const mapEl = ref(null)
 const mapError = ref(null)
@@ -17,12 +16,12 @@ const bins = ref([])
 const predictions = ref({})
 const route = ref(null)
 
-let markersLayer // LayerGroup for bins
-let routeLayerGroup // LayerGroup for route elements
-let binMarkers = {} // Store marker references for updates
+let markersLayer = null
+let routeLayerGroup = null
+let binMarkers = {}
 let routeArrows = null
 
-// --- Firebase Config (Ensure environment variables are loaded in main.js) ---
+// --- Firebase Config ---
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -33,493 +32,296 @@ const firebaseConfig = {
     appId: import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-// --- Helper Functions ---
+// --- Helpers ---
 
-const getMarkerColor = (fillLevel, timeToFull) => {
-    // Tailwind Color Classes as Hex for JS styling
-    if (fillLevel >= 90) return '#dc2626' // red-600 (CRITICAL)
-    if (fillLevel >= 80) return '#ea580c' // orange-600 (HIGH)
-    if (timeToFull !== null && timeToFull !== undefined && timeToFull <= 6) return '#f59e0b' // amber-500 (URGENT)
-    if (fillLevel >= 60) return '#eab308' // yellow-500 (MEDIUM)
-    if (fillLevel >= 40) return '#84cc16' // lime-500 (LOW)
-    return '#22c55e' // green-500 (NORMAL)
+const getMarkerColor = (fillLevel) => {
+    const level = Number(fillLevel) || 0
+    if (level >= 90) return '#dc2626' // red-600
+    if (level >= 80) return '#ea580c' // orange-600
+    if (level >= 60) return '#eab308' // yellow-500
+    if (level >= 40) return '#84cc16' // lime-500
+    return '#22c55e' // green-500
 }
 
 const getStatusInfo = (fillLevel, timeToFull) => {
-    // Tailwind CSS classes for dynamic status text
-    if (fillLevel >= 90) return { text: 'CRITICAL', color: 'bg-red-600', text_color: 'text-red-600', emoji: '🔴' }
-    if (fillLevel >= 80) return { text: 'HIGH', color: 'bg-orange-600', text_color: 'text-orange-600', emoji: '🟠' }
-    if (timeToFull !== null && timeToFull !== undefined && timeToFull <= 6) return { text: 'URGENT', color: 'bg-amber-500', text_color: 'text-amber-600', emoji: '⚠️' }
-    if (fillLevel >= 60) return { text: 'MEDIUM', color: 'bg-yellow-500', text_color: 'text-yellow-600', emoji: '🟡' }
-    if (fillLevel >= 40) return { text: 'LOW', color: 'bg-lime-500', text_color: 'text-lime-600', emoji: '🟢' }
-    return { text: 'NORMAL', color: 'bg-green-500', text_color: 'text-green-600', emoji: '✅' }
+    const level = Number(fillLevel) || 0
+    const ttf = Number(timeToFull)
+
+    // Logic for color/text
+    if (level >= 90) return { text: 'CRITICAL', bg: 'bg-red-100', textCol: 'text-red-700', border: 'border-red-600', emoji: '🔴' }
+    if (level >= 80) return { text: 'HIGH', bg: 'bg-orange-100', textCol: 'text-orange-700', border: 'border-orange-600', emoji: '🟠' }
+    if (timeToFull !== null && ttf <= 6) return { text: 'URGENT', bg: 'bg-amber-100', textCol: 'text-amber-700', border: 'border-amber-600', emoji: '⚠️' }
+    if (level >= 60) return { text: 'MEDIUM', bg: 'bg-yellow-100', textCol: 'text-yellow-700', border: 'border-yellow-600', emoji: '🟡' }
+
+    return { text: 'NORMAL', bg: 'bg-green-100', textCol: 'text-green-700', border: 'border-green-600', emoji: '✅' }
 }
 
-// Create clean, Tailwind-styled popup content
+// --- Popup Content Generator (Tailwind Styled) ---
 const createPopupContent = (bin, prediction) => {
-    const timeToFull = prediction?.time_to_full_h
-    const fillRate = prediction?.fill_rate
-    const status = getStatusInfo(bin.fill_level, timeToFull)
-    const predictedAt = prediction?.predicted_at ? new Date(prediction.predicted_at * 1000).toLocaleString() : null
+    // 🛡️ SECURITY: Force conversion to Number to prevent .toFixed crash
+    const fillLevel = Number(bin.fill_level) || 0
+    const lat = Number(bin.latitude) || 0
+    const lon = Number(bin.longitude) || 0
 
+    const timeToFull = prediction?.time_to_full_h !== undefined ? Number(prediction.time_to_full_h) : null
+    const fillRate = prediction?.fill_rate !== undefined ? Number(prediction.fill_rate) : null
+
+    const status = getStatusInfo(fillLevel, timeToFull)
+    const lastUpdate = bin.timestamp ? new Date(bin.timestamp * 1000).toLocaleString() : 'N/A'
+
+    // We build the HTML string using Tailwind classes
     return `
-        <div class="min-w-[260px] font-sans">
-            <div class="bg-blue-600 text-white p-4 -mt-4 -mx-5 rounded-t-lg shadow-md flex items-center gap-2">
-                <span class="text-xl">🗑️</span>
-                <h3 class="text-lg font-bold">${bin.id}</h3>
+        <div class="min-w-[240px] font-sans text-gray-800">
+            <div class="bg-blue-600 text-white px-4 py-3 rounded-t-lg flex items-center gap-2 -mx-5 -mt-4 mb-3">
+                <span class="text-lg">🗑️</span>
+                <h3 class="font-bold text-lg">${bin.id}</h3>
             </div>
 
-            <div class="p-2">
-                <div class="mt-2 mb-4 p-3 rounded-lg font-bold text-center text-sm flex items-center justify-center gap-2
-                    ${status.color.replace('bg-', 'bg-')}-100 ${status.text_color} border-l-4 border-${status.color.replace('bg-', '')}-600">
-                    <span class="text-xl">${status.emoji}</span>
-                    <span>${status.text}</span>
-                </div>
+            <div class="flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-bold text-sm mb-4 border-l-4 ${status.bg} ${status.textCol} ${status.border}">
+                <span class="text-lg">${status.emoji}</span>
+                <span>${status.text}</span>
+            </div>
 
-                <div class="mb-3">
-                    <div class="flex justify-between items-center mb-1">
-                        <strong class="text-gray-600 text-sm">Fill Level</strong>
-                        <strong class="text-gray-900 text-lg">${bin.fill_level.toFixed(1)}%</strong>
-                    </div>
-                    <div class="h-4 rounded-full bg-gray-200 overflow-hidden shadow-inner">
-                        <div style="width: ${bin.fill_level}%; background-color: ${getMarkerColor(bin.fill_level, timeToFull)};"
-                             class="h-full transition-all duration-500 shadow-md">
-                        </div>
+            <div class="mb-4">
+                <div class="flex justify-between items-end mb-1">
+                    <span class="text-xs font-semibold text-gray-500 uppercase">Fill Level</span>
+                    <span class="text-xl font-extrabold text-gray-900">${fillLevel.toFixed(1)}%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-3">
+                    <div class="h-3 rounded-full transition-all duration-500"
+                         style="width: ${fillLevel}%; background-color: ${getMarkerColor(fillLevel)}">
                     </div>
                 </div>
+            </div>
 
-                ${timeToFull !== null && timeToFull !== undefined ? `
-                    <div class="mb-3 p-3 rounded-lg bg-gray-50 border-l-4 border-amber-600">
-                        <div class="flex items-center gap-2 mb-1">
-                            <span class="text-xl">⏱️</span>
-                            <strong class="text-gray-600 text-sm">Time to Full (ML)</strong>
-                        </div>
-                        <div class="text-2xl font-extrabold ${timeToFull <= 6 ? 'text-red-600' : 'text-green-600'}">
-                            ${timeToFull.toFixed(1)} hours
-                        </div>
-                    </div>
-                ` : ''}
-
-                ${fillRate !== null && fillRate !== undefined ? `
-                    <div class="mb-3 p-2 bg-gray-100 rounded-md flex justify-between items-center text-sm">
-                        <div class="flex items-center gap-1 text-gray-600">
-                            <span class="text-lg">📈</span>
-                            <strong>Fill Rate:</strong>
-                        </div>
-                        <span class="font-bold text-gray-800">${fillRate.toFixed(2)}% / hour</span>
-                    </div>
-                ` : ''}
-
-                <div class="text-xs text-gray-500 text-center pt-2 border-t border-gray-200">
-                    Lat/Lon: ${bin.latitude.toFixed(5)}, ${bin.longitude.toFixed(5)}
-                    <br>
-                    Last reading: ${new Date(bin.timestamp * 1000).toLocaleString()}
+            ${timeToFull !== null ? `
+            <div class="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <div class="flex items-center gap-1 mb-1">
+                    <span class="text-base">⏱️</span>
+                    <span class="text-xs font-semibold text-gray-500 uppercase">Time to Full</span>
                 </div>
+                <div class="text-xl font-bold ${timeToFull <= 6 ? 'text-red-600' : 'text-emerald-600'}">
+                    ${timeToFull.toFixed(1)} <span class="text-sm font-normal text-gray-500">hours</span>
+                </div>
+            </div>
+            ` : ''}
+
+            <div class="mt-3 pt-3 border-t border-gray-100 text-[10px] text-gray-400 text-center leading-tight">
+                <div>${lat.toFixed(5)}, ${lon.toFixed(5)}</div>
+                <div class="mt-1">Updated: ${lastUpdate}</div>
             </div>
         </div>
     `
 }
 
-// Draw/Update Bins (uses L.circleMarker and dynamic style for animation)
+// --- Map Logic ---
+
 const drawBins = () => {
     if (!map.value || !markersLayer) return
 
-    const currentBinIds = new Set(bins.value.map(b => b.id))
-
-    // 1. Remove obsolete markers
+    // 1. Cleanup old markers
+    const currentIds = new Set(bins.value.map(b => b.id))
     Object.keys(binMarkers).forEach(id => {
-        if (!currentBinIds.has(id)) {
+        if (!currentIds.has(id)) {
             markersLayer.removeLayer(binMarkers[id])
             delete binMarkers[id]
         }
     })
 
     // 2. Add/Update markers
-    bins.value.forEach((bin) => {
+    bins.value.forEach(bin => {
+        // Safe casting
+        const fill = Number(bin.fill_level) || 0
+        const lat = Number(bin.latitude)
+        const lon = Number(bin.longitude)
+
+        if (isNaN(lat) || isNaN(lon)) return
+
         const prediction = predictions.value[bin.id]
-        const timeToFull = prediction?.time_to_full_h
-        const color = getMarkerColor(bin.fill_level, timeToFull)
-        // Dynamic radius based on fill level (10px base + 10px max increase)
-        const radius = 10 + (bin.fill_level / 100) * 10
-        const lat = parseFloat(bin.latitude);
-        const lon = parseFloat(bin.longitude);
-
-        if (isNaN(lat) || isNaN(lon)) return;
-
-        const popupContent = createPopupContent(bin, prediction);
+        const color = getMarkerColor(fill)
+        const radius = 8 + (fill / 100) * 8 // 8px to 16px
+        const popup = createPopupContent(bin, prediction)
 
         if (binMarkers[bin.id]) {
-            // Update existing marker style and position
-            binMarkers[bin.id].setStyle({
-                radius: radius,
-                fillColor: color,
-            }).setLatLng([lat, lon]);
+            // Update existing
+            binMarkers[bin.id].setLatLng([lat, lon])
+            binMarkers[bin.id].setStyle({ fillColor: color, radius: radius })
+            binMarkers[bin.id].setPopupContent(popup)
 
-            // Re-set the class for the pulse animation if critical
-            const currentClassName = binMarkers[bin.id].options.className || '';
-            const newClassName = bin.fill_level >= 90 ? 'pulse-marker' : '';
-            if (currentClassName !== newClassName) {
-                binMarkers[bin.id].options.className = newClassName;
+            // Toggle pulse class
+            const el = binMarkers[bin.id].getElement()
+            if (el) {
+                if (fill >= 90) el.classList.add('pulse-marker')
+                else el.classList.remove('pulse-marker')
             }
-
-            binMarkers[bin.id].setPopupContent(popupContent);
         } else {
-            // Create new marker
+            // Create new
             const marker = L.circleMarker([lat, lon], {
                 radius: radius,
-                color: '#fff', // White border
                 fillColor: color,
-                fillOpacity: 0.85,
+                color: 'white',
                 weight: 2,
-                className: bin.fill_level >= 90 ? 'pulse-marker' : ''
+                opacity: 1,
+                fillOpacity: 0.9,
+                className: fill >= 90 ? 'pulse-marker' : ''
             })
 
-            marker.bindPopup(popupContent, {
-                maxWidth: 300,
-                className: 'custom-popup'
-            })
+            marker.bindPopup(popup, { minWidth: 260, className: 'tailwind-popup' })
+            marker.on('click', (e) => map.value.setView(e.latlng, map.value.getZoom()))
 
-            // Center map on click
-            marker.on('click', (e) => {
-                map.value.panTo(e.latlng);
-            })
-
-            marker.addTo(markersLayer)
+            markersLayer.addLayer(marker)
             binMarkers[bin.id] = marker
         }
     })
 }
 
-// Draw/Update Route
 const drawRoute = (routeData) => {
     if (!map.value || !routeLayerGroup) return
-
-    // Clear existing route elements
     routeLayerGroup.clearLayers()
-    if (routeArrows) {
-        routeArrows.remove()
-        routeArrows = null
-    }
+    if (routeArrows) { routeArrows.remove(); routeArrows = null; }
 
-    if (!showRoute.value || !routeData || !routeData.stops || routeData.stops.length < 2) return
+    if (!showRoute.value || !routeData || !routeData.stops) return
 
-    const stops = routeData.stops
-    // Ensure routeCoords are numbers and use latitude/longitude correctly
-    const routeCoords = stops.map(s => [parseFloat(s.latitude), parseFloat(s.longitude)])
+    const latLngs = routeData.stops.map(s => [Number(s.latitude), Number(s.longitude)])
+    if (latLngs.length < 2) return
 
-    // 1. Draw main polyline
-    const polyline = L.polyline(routeCoords, {
-        color: '#3b82f6', // blue-600
-        weight: 6,
+    // Polyline
+    const polyline = L.polyline(latLngs, {
+        color: '#3b82f6', // blue-500
+        weight: 5,
         opacity: 0.8,
-        lineJoin: 'round',
         lineCap: 'round',
-        dashArray: '10, 10', // Animated dash effect
-        className: 'route-line'
+        lineJoin: 'round',
+        dashArray: '12, 12'
     }).addTo(routeLayerGroup)
 
-    // 2. Add animated arrows using PolylineDecorator
-    routeArrows = L.polylineDecorator(polyline, {
-        patterns: [
-            {
-                offset: '0', // Start at 0
-                repeat: 80, // Repeat every 80 pixels
-                symbol: L.Symbol.arrowHead({
-                    pixelSize: 14,
-                    polygon: false,
-                    pathOptions: {
-                        stroke: true,
-                        color: '#1e40af', // blue-800
-                        weight: 3,
-                        opacity: 0.9
-                    }
-                })
-            }
-        ]
-    }).addTo(map.value)
+    // Arrows
+    try {
+        routeArrows = L.polylineDecorator(polyline, {
+            patterns: [{
+                offset: '5%', repeat: '100px',
+                symbol: L.Symbol.arrowHead({ pixelSize: 12, polygon: false, pathOptions: { stroke: true, color: '#1d4ed8', weight: 3 } })
+            }]
+        }).addTo(map.value)
+    } catch (e) { console.warn("PolylineDecorator error:", e) }
 
-    // 3. Add enhanced markers for stops
-    stops.forEach((stop, i) => {
-        const lat = parseFloat(stop.latitude);
-        const lon = parseFloat(stop.longitude);
-        if (isNaN(lat) || isNaN(lon)) return;
+    // Markers (Start/End/Stops)
+    routeData.stops.forEach((stop, i) => {
+        const isStart = i === 0
+        const isEnd = i === routeData.stops.length - 1
+        const lat = Number(stop.latitude)
+        const lon = Number(stop.longitude)
 
-        let iconHtml, markerClass;
+        let html = ''
+        if (isStart) html = `<div class="bg-blue-700 text-white font-bold px-2 py-1 rounded shadow text-xs border-2 border-white">START</div>`
+        else if (isEnd) html = `<div class="bg-red-600 text-white font-bold px-2 py-1 rounded shadow text-xs border-2 border-white">END</div>`
+        else html = `<div class="bg-blue-500 text-white font-bold w-6 h-6 rounded-full flex items-center justify-center shadow border-2 border-white text-xs">${i}</div>`
 
-        if (i === 0) { // Start/Depot
-            iconHtml = `<div class="route-start-marker">🏢 START</div>`;
-            markerClass = 'depot-marker';
-        } else if (i === stops.length - 1) { // End/Return
-            iconHtml = `<div class="route-end-marker">END</div>`;
-            markerClass = 'return-marker';
-        } else { // Numbered stop
-            // Order is likely 1-indexed for stops, but loop index is 1-indexed after start
-            const stopOrder = i;
-            iconHtml = `<div class="route-stop-marker">${stopOrder}</div>`;
-            markerClass = 'stop-marker';
-        }
+        const icon = L.divIcon({ className: 'bg-transparent border-0', html, iconSize: [40, 40], iconAnchor: [20, 20] })
+        L.marker([lat, lon], { icon }).addTo(routeLayerGroup)
+    })
 
-        const icon = L.divIcon({
-            className: markerClass,
-            html: iconHtml,
-            iconSize: [80, 30],
-            iconAnchor: [40, 15]
-        });
-
-        const marker = L.marker([lat, lon], { icon })
-            .bindPopup(
-                `
-                <div class="font-sans text-sm p-1">
-                    <strong class="text-blue-600">${i === 0 || i === stops.length - 1 ? stop.bin_id || 'DEPOT' : `Stop ${i}: ${stop.bin_id}`}</strong>
-                    ${stop.fill_level ? `<br>Fill: ${stop.fill_level.toFixed(1)}%` : ''}
-                    ${stop.time_to_full_h ? `<br>TTF: ${stop.time_to_full_h.toFixed(1)}h` : ''}
-                </div>
-                `
-            )
-            .addTo(routeLayerGroup);
-    });
-
-    // Fit the map to the route bounds when drawing
-    map.value.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+    map.value.fitBounds(polyline.getBounds(), { padding: [50, 50] })
 }
 
-// Add Legend Control (using Tailwind classes in HTML)
-const addLegend = () => {
-    if (!map.value) return
-
-    const legend = L.control({ position: 'bottomright' })
-
-    legend.onAdd = function() {
-        const div = L.DomUtil.create('div', 'map-legend bg-white p-3 rounded-xl shadow-xl border border-gray-100 font-sans text-xs')
-        div.innerHTML = `
-            <div class="font-bold mb-2 text-gray-800 border-b pb-1">🗑️ Fill Level Status</div>
-            <div class="flex items-center gap-2 mb-1">
-                <div style="background: #dc2626;" class="w-3 h-3 rounded-full border border-white shadow"></div>
-                <span>CRITICAL (&ge;90%)</span>
-            </div>
-            <div class="flex items-center gap-2 mb-1">
-                <div style="background: #ea580c;" class="w-3 h-3 rounded-full border border-white shadow"></div>
-                <span>HIGH (&ge;80%)</span>
-            </div>
-            <div class="flex items-center gap-2 mb-1">
-                <div style="background: #f59e0b;" class="w-3 h-3 rounded-full border border-white shadow"></div>
-                <span>URGENT (TTF &le;6h)</span>
-            </div>
-            <div class="flex items-center gap-2 mb-1">
-                <div style="background: #22c55e;" class="w-3 h-3 rounded-full border border-white shadow"></div>
-                <span>LOW / NORMAL</span>
-            </div>
-            <div class="font-bold mt-3 mb-2 text-blue-700 border-t pt-2">🚛 Routing</div>
-             <div class="flex items-center gap-2">
-                <div class="w-4 h-2 bg-blue-600 border border-white shadow"></div>
-                <span>Optimized Path</span>
-            </div>
-        `
-        return div
-    }
-
-    legend.addTo(map.value)
-}
-
-// --- Lifecycle Hooks ---
+// --- Lifecycle ---
 
 onMounted(() => {
-    // 1. Fix Leaflet default icon path issues
-    const iconRetinaUrl = new URL('leaflet/dist/images/marker-icon-2x.png', import.meta.url).href
-    const iconUrl = new URL('leaflet/dist/images/marker-icon.png', import.meta.url).href
-    const shadowUrl = new URL('leaflet/dist/images/marker-shadow.png', import.meta.url).href
-    L.Icon.Default.mergeOptions({ iconRetinaUrl, iconUrl, shadowUrl })
-
+    // 1. Init Map
     try {
-        // 2. Initialize Map
-        map.value = L.map(mapEl.value || 'map', {
-            zoomControl: true,
-            attributionControl: true
-        }).setView([33.3152, 44.3667], 11) // Default to Baghdad/Hillah area (Example)
+        map.value = L.map(mapEl.value, { zoomControl: false }).setView([33.3152, 44.3667], 12)
+        L.control.zoom({ position: 'bottomright' }).addTo(map.value)
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
+            attribution: '&copy; OpenStreetMap',
             maxZoom: 19
         }).addTo(map.value)
 
-        // 3. Setup Layers
         markersLayer = L.layerGroup().addTo(map.value)
         routeLayerGroup = L.layerGroup().addTo(map.value)
-        addLegend()
-
-    } catch (err) {
-        console.error('Failed to create map', err)
-        mapError.value = 'Unable to initialize map. Check console for details.'
-        return;
+    } catch (e) {
+        mapError.value = "Map Error: " + e.message
+        return
     }
 
-    // 4. Initialize Firebase & Listeners
+    // 2. Firebase Listener
     const app = initializeApp(firebaseConfig)
     const db = getDatabase(app)
 
-    const binsRef = dbRef(db, 'bins')
-    onValue(binsRef, snapshot => {
-        const data = snapshot.val()
-        bins.value = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : []
+    // Bins Listener (CRITICAL FIX FOR DATA TYPES)
+    onValue(dbRef(db, 'bins'), (snap) => {
+        const val = snap.val()
+        if (val) {
+            bins.value = Object.keys(val).map(key => ({
+                id: key,
+                ...val[key],
+                // 🛠️ CRITICAL FIX: Cast to Number immediately
+                fill_level: Number(val[key].fill_level) || 0,
+                latitude: Number(val[key].latitude) || 0,
+                longitude: Number(val[key].longitude) || 0,
+                timestamp: Number(val[key].timestamp) || 0
+            }))
+        } else {
+            bins.value = []
+        }
         drawBins()
     })
 
-    const predRef = dbRef(db, 'predictions')
-    onValue(predRef, snapshot => {
-        predictions.value = snapshot.val() || {}
-        drawBins() // Re-draw bins to update popups with new predictions
-    })
-
-    const routeRef = dbRef(db, 'routes/route_1')
-    onValue(routeRef, snapshot => {
-        route.value = snapshot.val()
-        drawRoute(route.value)
-    })
+    // Predictions & Route Listeners
+    onValue(dbRef(db, 'predictions'), snap => { predictions.value = snap.val() || {}; drawBins() })
+    onValue(dbRef(db, 'routes/route_1'), snap => { route.value = snap.val(); drawRoute(route.value) })
 })
 
-onUnmounted(() => {
-    if (map.value) {
-        map.value.remove()
-        map.value = null
-    }
-})
-
-// Watchers
+onUnmounted(() => { if (map.value) map.value.remove() })
 watch(showRoute, () => drawRoute(route.value))
 
-// Expose functions for parent component access (e.g., DashboardView clicking a bin)
-const flyToBin = (lat, lon) => {
-    if (map.value) {
-        map.value.flyTo([lat, lon], 15, { duration: 1.5 });
-        // Optional: Open the bin's popup if the marker exists
-        const binId = bins.value.find(b => parseFloat(b.latitude) === lat && parseFloat(b.longitude) === lon)?.id;
-        if (binId && binMarkers[binId]) {
-             binMarkers[binId].openPopup();
-        }
+defineExpose({
+    flyToBin: (lat, lon) => {
+        if (map.value && lat && lon) map.value.flyTo([lat, lon], 16)
     }
-}
-defineExpose({ flyToBin });
-
+})
 </script>
 
 <template>
-    <div class="map-wrapper relative h-full w-full">
-        <div class="absolute top-4 right-4 z-[1000] flex flex-col gap-3">
-            <button
-                @click="showRoute = !showRoute"
-                :class="[
-                    'w-36 px-4 py-2 rounded-xl shadow-lg font-bold transition-all duration-300 transform hover:scale-[1.02] border-2',
-                    showRoute
-                        ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
-                        : 'bg-white text-blue-600 border-blue-600 hover:bg-blue-50'
-                ]"
-            >
-                <span class="flex items-center justify-center gap-2">
-                    <span>{{ showRoute ? '🚛' : '🗺️' }}</span>
-                    <span>{{ showRoute ? 'Hide Route' : 'Show Route' }}</span>
-                </span>
-            </button>
-
-            <button
-                @click="map?.fitBounds(markersLayer?.getBounds() || routeLayerGroup?.getBounds(), { padding: [50, 50], maxZoom: 14 })"
-                class="w-36 px-4 py-2 bg-white text-gray-700 rounded-xl shadow-lg font-medium transition-all duration-300 transform hover:scale-[1.02] hover:bg-gray-50 border-2 border-gray-200"
-                title="Fit all urgent bins or route in view"
-            >
-                <span class="flex items-center justify-center gap-2">
-                    <span>🎯</span>
-                    <span>Fit View</span>
-                </span>
-            </button>
+    <div class="relative w-full h-full bg-gray-100 rounded-xl overflow-hidden shadow-inner">
+        <div v-if="mapError" class="absolute inset-0 z-50 flex items-center justify-center bg-red-50 p-4">
+            <div class="text-red-600 font-bold">{{ mapError }}</div>
         </div>
 
-        <div v-if="mapError" class="absolute inset-0 z-[1000] bg-red-100/80 backdrop-blur flex items-center justify-center p-8">
-            <p class="text-xl font-medium text-red-700">{{ mapError }}</p>
-        </div>
+        <div ref="mapEl" class="w-full h-full z-0"></div>
 
-        <div id="map" ref="mapEl" class="h-full w-full"></div>
+        <div class="absolute top-4 right-4 z-[400] flex flex-col gap-2">
+            <button @click="showRoute = !showRoute"
+                class="bg-white hover:bg-gray-50 text-blue-600 font-bold py-2 px-4 rounded-lg shadow-lg border border-blue-100 transition-transform active:scale-95 flex items-center gap-2">
+                <span>{{ showRoute ? '🚛' : '🗺️' }}</span>
+                <span>{{ showRoute ? 'Hide Route' : 'Show Route' }}</span>
+            </button>
+
+            <button @click="map?.fitBounds(markersLayer?.getBounds())"
+                class="bg-white hover:bg-gray-50 text-gray-700 font-bold py-2 px-4 rounded-lg shadow-lg border border-gray-100 transition-transform active:scale-95 flex items-center gap-2">
+                <span>🎯</span>
+                <span>Center View</span>
+            </button>
+        </div>
     </div>
 </template>
 
 <style>
-/* --- Global Leaflet Overrides (Use :root or global styles if scoped fails) --- */
-:root {
-    --color-blue-600: #2563eb;
-    --color-red-600: #dc2626;
+/* Leaflet Global Styles */
+.leaflet-popup-content-wrapper {
+    @apply rounded-xl shadow-xl p-0 border-0;
+}
+.leaflet-popup-content {
+    @apply m-0 p-0 w-auto !important;
 }
 
-/* Bin Marker Animations */
-@keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 0.85; }
-    50% { transform: scale(1.15); opacity: 1; }
+/* Pulse Animation for Critical Bins */
+@keyframes pulse-ring {
+    0% { transform: scale(0.8); opacity: 0.8; }
+    100% { transform: scale(2.5); opacity: 0; }
 }
 .pulse-marker {
-    animation: pulse 2s ease-in-out infinite;
-    /* !important to ensure L.circleMarker options don't override */
-    border-radius: 50% !important;
-}
-
-/* Route Line Animation */
-@keyframes routeFlow {
-    0% { stroke-dashoffset: 20; }
-    100% { stroke-dashoffset: 0; }
-}
-.route-line {
-    animation: routeFlow 1s linear infinite;
-    stroke-linecap: round !important;
-    stroke-linejoin: round !important;
-}
-
-/* Custom Popup Styling */
-.custom-popup .leaflet-popup-content-wrapper {
-    border-radius: 12px;
-    padding: 0;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-    border: none;
-}
-.custom-popup .leaflet-popup-content {
-    margin: 0;
-    padding: 0;
-}
-.custom-popup .leaflet-popup-tip {
-    background: white;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-/* --- Route Marker Styles (Tailwind look with fixed sizes) --- */
-
-.route-start-marker {
-    background: linear-gradient(135deg, var(--color-blue-600), #1e40af); /* blue-800 */
-    color: white;
-    padding: 6px 10px;
-    border-radius: 8px;
-    font-weight: bold;
-    font-size: 13px;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
-    border: 3px solid white;
-    white-space: nowrap;
-}
-
-.route-end-marker {
-    background: linear-gradient(135deg, var(--color-red-600), #991b1b); /* red-800 */
-    color: white;
-    padding: 6px 10px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    box-shadow: 0 3px 8px rgba(239, 68, 68, 0.4);
-    border: 2px solid white;
-}
-
-.route-stop-marker {
-    background: linear-gradient(135deg, #3b82f6, var(--color-blue-600));
-    color: white;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: bold;
-    box-shadow: 0 3px 8px rgba(59, 130, 246, 0.5);
-    border: 2px solid white;
-    min-width: 28px;
-    text-align: center;
+    animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    transform-origin: center;
 }
 </style>
