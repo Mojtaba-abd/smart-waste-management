@@ -14,10 +14,16 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
+    "@vueuse/core": "^14.1.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "firebase": "^12.6.0",
     "leaflet": "^1.9.4",
     "leaflet-polylinedecorator": "^1.6.0",
     "lucide-vue-next": "^0.560.0",
+    "reka-ui": "^2.6.1",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7",
     "vue": "^3.5.25",
     "vue-router": "^4.6.3",
     "vue3-leaflet": "^1.0.50"

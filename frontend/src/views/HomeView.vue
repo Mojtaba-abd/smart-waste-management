@@ -1,165 +1,462 @@
 <script setup>
-import { ArrowRight, Leaf, Map, Cpu, Wifi, Users, Github, Linkedin } from 'lucide-vue-next';
-import { useRouter } from 'vue-router';
+import { ArrowRight, Leaf, Map, Wifi, Users, Github, Linkedin, Cpu, TrendingUp, MapPin, Clock, Sparkles, Zap, BarChart3 } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
+import { onMounted } from 'vue'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 
-const router = useRouter();
+const router = useRouter()
+const navigateToDashboard = () => router.push('/dashboard')
 
-const navigateToDashboard = () => {
-  router.push('/dashboard');
-};
+// Simple scroll animation
+onMounted(() => {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('animate-fade-in')
+        }
+      })
+    },
+    { threshold: 0.1 }
+  )
 
-// Mock data for your team. Replace placeholder images with your real selfies!
+  document.querySelectorAll('[data-animate]').forEach(el => {
+    observer.observe(el)
+  })
+})
+
+// Team members
 const teamMembers = [
+  { name: "Mujtaba", role: "Lead Developer & Architect", github: "#", linkedin: "#" },
+  { name: "Hussein", role: "Hardware & IoT Specialist", github: "#", linkedin: "#" },
+  { name: "Mustafa", role: "Hardware & IoT Specialist", github: "#", linkedin: "#" },
+  { name: "Zanib", role: "Project Manager & Research", github: "#", linkedin: "#" }
+]
+
+// Features with enhanced icons
+const features = [
   {
-    name: "Mujtaba", // You
-    role: "Lead Developer & Architect",
-    image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Hussein&style=circle&top=shortHair",
-    github: "#", linkedin: "#"
+    icon: Wifi,
+    title: 'Real-time Monitoring',
+    description: 'Live data from IoT sensors tracking bin fill levels 24/7 with millisecond precision',
+    color: 'text-cyan-400'
   },
   {
-    name: "Hussein", // Member 2
-    role: "Hardware & IoT Specialist",
-    image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ali&style=circle&facialHair=beardLight",
-    github: "#", linkedin: "#"
+    icon: Zap,
+    title: 'AI-Powered Routing',
+    description: 'Advanced ML algorithms optimize collection routes, reducing costs by 40%',
+    color: 'text-emerald-400'
   },
   {
-    name: "Mustafa", // Member 2
-    role: "Hardware & IoT Specialist",
-    image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ali&style=circle&facialHair=beardLight",
-    github: "#", linkedin: "#"
+    icon: TrendingUp,
+    title: 'Predictive Analytics',
+    description: 'Forecast when bins will be full with 95% accuracy to prevent overflow',
+    color: 'text-violet-400'
   },
   {
-    name: "Zenaib", // Member 5
-    role: "Project Manager & Research",
-    image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Layla&style=circle&top=bob",
-    github: "#", linkedin: "#"
+    icon: Leaf,
+    title: 'Eco-Friendly Impact',
+    description: 'Reduce carbon emissions and fuel consumption through smart optimization',
+    color: 'text-green-400'
+  },
+  {
+    icon: Clock,
+    title: 'Time Efficiency',
+    description: 'Save operational time by collecting only bins that actually need service',
+    color: 'text-amber-400'
+  },
+  {
+    icon: BarChart3,
+    title: 'Advanced Analytics',
+    description: 'Comprehensive dashboards with real-time metrics and historical insights',
+    color: 'text-blue-400'
   }
-];
+]
 </script>
 
 <template>
-  <div class="font-sans text-gray-800 bg-white selection:bg-emerald-100">
+  <div class="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-black text-white">
 
-    <nav class="container mx-auto px-6 py-6 flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <div class="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center text-white font-bold">E</div>
-        <span class="text-xl font-bold tracking-tight">Team Enki</span>
-      </div>
-      <div class="hidden md:flex gap-8 text-sm font-medium text-gray-600">
-        <a href="#features" class="hover:text-emerald-600 transition">Features</a>
-        <a href="#technology" class="hover:text-emerald-600 transition">Technology</a>
-        <a href="#team" class="hover:text-emerald-600 transition">Our Team</a>
-      </div>
-      <button @click="navigateToDashboard" class="bg-black text-white px-6 py-2.5 rounded-full text-sm font-medium hover:bg-emerald-600 transition shadow-lg hover:shadow-emerald-500/30">
-        Open Dashboard
-      </button>
-    </nav>
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-xl border-b border-emerald-500/20">
+      <div class="container mx-auto px-6 py-4">
+        <div class="flex items-center justify-between">
+          <!-- Logo -->
+          <div class="flex items-center gap-3">
+            <div class="relative">
+              <div class="w-10 h-10 bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-xl flex items-center justify-center text-gray-900 font-bold text-lg shadow-lg shadow-emerald-500/50">
+                E
+              </div>
+              <div class="absolute inset-0 bg-emerald-400/20 blur-xl rounded-xl"></div>
+            </div>
+            <span class="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">Enki</span>
+          </div>
 
-    <header class="container mx-auto px-6 mt-8 mb-20">
-      <div class="relative bg-gray-900 rounded-[3rem] overflow-hidden min-h-[500px] flex items-center">
-        <div class="absolute inset-0 opacity-60">
-            <img src="https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?q=80&w=2070&auto=format&fit=crop" class="w-full h-full object-cover" alt="Clean City" />
-        </div>
-        <div class="relative z-10 px-10 md:px-20 py-20 max-w-4xl">
-          <span class="text-emerald-400 font-bold tracking-wider uppercase text-xs mb-4 block">IoT & AI Solution by Team Enki</span>
-          <h1 class="text-5xl md:text-7xl font-bold text-white leading-tight mb-8">
-            Smarter Cities Start with <br />
-            <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">Intelligent Solutions.</span>
-          </h1>
-          <p class="text-gray-300 text-lg md:text-xl max-w-2xl mb-10 leading-relaxed">
-            Revolutionizing urban cleanliness with IoT sensors and AI-driven route optimization. Save fuel, reduce overflow, and keep cities green.
-          </p>
-          <div class="flex flex-wrap gap-4">
-            <button @click="navigateToDashboard" class="bg-emerald-500 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-emerald-400 transition flex items-center gap-2">
-              Get in Touch <ArrowRight size="20" />
-            </button>
-            <button @click="navigateToDashboard" class="bg-emerald-500 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-emerald-400 transition flex items-center gap-2">
-              Live Demo <ArrowRight size="20" />
-            </button>
+          <!-- Navigation Links -->
+          <div class="hidden md:flex items-center gap-8">
+            <a href="#" class="text-white font-medium hover:text-emerald-400 transition">Home</a>
+            <a href="#features" class="text-gray-400 hover:text-emerald-400 transition">Features</a>
+            <a href="#team" class="text-gray-400 hover:text-emerald-400 transition">Team</a>
+            <a href="#" class="text-gray-400 hover:text-emerald-400 transition">Contact</a>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex items-center gap-3">
+            <Button variant="ghost" class="hidden md:block text-gray-400 hover:text-white">
+              Log in
+            </Button>
+            <Button
+              @click="navigateToDashboard"
+              class="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white shadow-lg shadow-emerald-500/50"
+            >
+              Get started
+            </Button>
           </div>
         </div>
       </div>
-    </header>
+    </nav>
 
-    <section id="technology" class="container mx-auto px-6 py-12 text-center">
-        <p class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-8">Powered by Modern Tech</p>
-        <div class="flex flex-wrap justify-center gap-12 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
-            <span class="text-xl font-bold flex items-center gap-2"><Cpu /> ESP32</span>
-            <span class="text-xl font-bold flex items-center gap-2">🔥 Firebase</span>
-            <span class="text-xl font-bold flex items-center gap-2">🟢 Vue.js</span>
-            <span class="text-xl font-bold flex items-center gap-2">🗺️ Leaflet</span>
-            <span class="text-xl font-bold flex items-center gap-2">🤖 Scikit-Learn</span>
+    <!-- Hero Section with Grid Background -->
+    <section class="relative pt-32 pb-20 overflow-hidden">
+      <!-- Animated Grid Background -->
+      <div class="absolute inset-0 bg-[linear-gradient(to_right,#10b98120_1px,transparent_1px),linear-gradient(to_bottom,#10b98120_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_110%)]"></div>
+
+      <!-- Glowing Orbs -->
+      <div class="absolute top-40 left-20 w-96 h-96 bg-emerald-500/30 rounded-full blur-[128px]"></div>
+      <div class="absolute top-60 right-20 w-96 h-96 bg-cyan-500/20 rounded-full blur-[128px]"></div>
+
+      <div class="container mx-auto px-6 relative z-10">
+        <div class="grid lg:grid-cols-2 gap-12 items-center min-h-[600px]">
+
+          <!-- Left Content -->
+          <div class="space-y-8" data-animate="fade-up">
+            <Badge variant="outline" class="border-emerald-500/50 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20">
+              <Sparkles class="w-3 h-3 mr-1" />
+              AI-Powered Waste Management
+            </Badge>
+
+            <h1 class="text-6xl md:text-7xl font-bold leading-tight">
+              <span class="bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+                Smart Waste
+              </span>
+              <br />
+              <span class="bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                Management System
+              </span>
+            </h1>
+
+            <p class="text-xl text-gray-400 max-w-xl leading-relaxed">
+              Revolutionary AI-powered solution using IoT sensors and predictive analytics to optimize collection routes, reduce costs by 40%, and minimize environmental impact.
+            </p>
+
+            <!-- CTA Buttons -->
+            <div class="flex flex-col sm:flex-row gap-4 pt-4">
+              <Button
+                @click="navigateToDashboard"
+                size="lg"
+                class="group bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white shadow-2xl shadow-emerald-500/50 text-lg"
+              >
+                Live Demo
+                <ArrowRight class="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+              </Button>
+
+              <Button
+                size="lg"
+                variant="outline"
+                class="border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 text-lg"
+              >
+                Get in Touch
+              </Button>
+            </div>
+
+            <!-- Stats Pills -->
+            <div class="flex flex-wrap gap-4 pt-4">
+              <div class="px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-full backdrop-blur-sm">
+                <span class="text-emerald-400 font-bold">25+</span>
+                <span class="text-gray-400 ml-2 text-sm">Active Bins</span>
+              </div>
+              <div class="px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-full backdrop-blur-sm">
+                <span class="text-cyan-400 font-bold">40%</span>
+                <span class="text-gray-400 ml-2 text-sm">Cost Reduction</span>
+              </div>
+              <div class="px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-full backdrop-blur-sm">
+                <span class="text-violet-400 font-bold">95%</span>
+                <span class="text-gray-400 ml-2 text-sm">Accuracy</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Side - Hero Image Card -->
+          <div class="relative" data-animate="fade-up">
+            <Card class="overflow-hidden border-gray-800 bg-gray-900/50 backdrop-blur-xl shadow-2xl">
+              <div class="relative">
+                <img
+                  src="/src/assets/images/Litterbin-04-2560x1440.jpg"
+                  alt="Smart Waste Bins"
+                  class="w-full h-[500px] object-cover"
+                />
+                <div class="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/50 to-transparent"></div>
+
+                <!-- Floating Info Card -->
+                <Card class="absolute bottom-6 left-6 right-6 border-gray-800 bg-gray-950/90 backdrop-blur-xl">
+                  <CardContent class="p-4">
+                    <p class="text-xs font-semibold text-emerald-400 mb-2">LIVE STATUS</p>
+                    <div class="flex items-center gap-3">
+                      <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/50">
+                        <Map class="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 class="font-bold text-white">Smart Collection Route</h3>
+                        <p class="text-sm text-gray-400">Optimized in real-time</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </Card>
+
+            <!-- Decorative Glow -->
+            <div class="absolute -inset-4 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 blur-3xl -z-10"></div>
+          </div>
         </div>
+      </div>
     </section>
 
-    <section id="features" class="bg-gray-50 py-24 rounded-[3rem] my-12 mx-4">
-        <div class="container mx-auto px-6">
-            <div class="text-center max-w-2xl mx-auto mb-16">
-                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Smart Solutions, Real Impact</h2>
-                <p class="text-gray-500 text-lg">We replace traditional, static waste collection with a dynamic, data-driven approach.</p>
+    <!-- Tech Stack Section -->
+    <section class="py-16 relative">
+      <div class="container mx-auto px-6">
+        <Card class="border-gray-800 bg-gray-900/50 backdrop-blur-xl" data-animate="fade-up">
+          <CardContent class="p-12">
+            <div class="text-center mb-8">
+              <Badge variant="outline" class="border-gray-700 text-gray-400 mb-4">
+                POWERED BY CUTTING-EDGE TECHNOLOGY
+              </Badge>
+              <h2 class="text-3xl font-bold">
+                <span class="text-white">Built with </span>
+                <span class="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">modern tech stack</span>
+              </h2>
             </div>
-            <div class="grid md:grid-cols-3 gap-8">
-                <div class="bg-white p-8 rounded-3xl shadow-sm hover:shadow-xl transition duration-300">
-                    <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-6"><Wifi size="24" /></div>
-                    <h3 class="text-xl font-bold mb-3">IoT Monitoring</h3>
-                    <p class="text-gray-500 leading-relaxed">Ultrasonic sensors measure fill levels in real-time, sending data instantly to the cloud.</p>
-                </div>
-                <div class="bg-white p-8 rounded-3xl shadow-sm hover:shadow-xl transition duration-300">
-                    <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6"><Map size="24" /></div>
-                    <h3 class="text-xl font-bold mb-3">Smart Routing</h3>
-                    <p class="text-gray-500 leading-relaxed">Algorithms calculate the most efficient path to collect only the full bins.</p>
-                </div>
-                <div class="bg-white p-8 rounded-3xl shadow-sm hover:shadow-xl transition duration-300">
-                    <div class="w-12 h-12 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center mb-6"><Leaf size="24" /></div>
-                    <h3 class="text-xl font-bold mb-3">Eco Impact</h3>
-                    <p class="text-gray-500 leading-relaxed">Reduce carbon emissions by eliminating unnecessary trips and optimizing fuel usage.</p>
-                </div>
+
+            <div class="flex flex-wrap justify-center items-center gap-12 opacity-60 hover:opacity-100 transition-opacity duration-500">
+              <div class="flex items-center gap-2 text-xl font-bold text-gray-300">
+                <Cpu class="w-7 h-7 text-emerald-400" /> ESP32
+              </div>
+              <div class="text-xl font-bold text-gray-300">🔥 Firebase</div>
+              <div class="text-xl font-bold text-gray-300">🟢 Vue.js</div>
+              <div class="text-xl font-bold text-gray-300">🗺️ Leaflet</div>
+              <div class="text-xl font-bold text-gray-300">🤖 Python ML</div>
             </div>
-        </div>
+          </CardContent>
+        </Card>
+      </div>
     </section>
 
-    <section id="team" class="container mx-auto px-6 py-24 text-center">
-        <div class="max-w-2xl mx-auto mb-16">
-            <div class="flex items-center justify-center gap-2 text-emerald-600 font-bold uppercase tracking-wider text-sm mb-4">
-                <Users size="18" /> Our People
-            </div>
-            <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Meet Team Enki</h2>
-            <p class="text-gray-500 text-lg">We are a group of passionate engineering students dedicated to using technology for a cleaner, smarter future. Here are the faces behind the code!</p>
+    <!-- Features Section -->
+    <section id="features" class="py-20 relative">
+      <div class="container mx-auto px-6">
+        <div class="text-center mb-16" data-animate="fade-up">
+          <Badge variant="outline" class="border-emerald-500/50 bg-emerald-500/10 text-emerald-400 mb-4">
+            POWERFUL FEATURES
+          </Badge>
+          <h2 class="text-4xl md:text-5xl font-bold mb-4">
+            <span class="text-white">Everything you need, </span>
+            <span class="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">in one platform</span>
+          </h2>
+          <p class="text-gray-400 text-lg max-w-2xl mx-auto">
+            Advanced AI algorithms combined with IoT sensors to create the most efficient waste management system
+          </p>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8">
-            <div v-for="member in teamMembers" :key="member.name" class="group">
-                <div class="relative w-40 h-40 mx-auto mb-6">
-                    <div class="absolute inset-0 rounded-full bg-emerald-100 scale-95 group-hover:scale-110 transition-transform duration-500 -z-10"></div>
-                    <img :src="member.image" :alt="member.name" class="w-full h-full rounded-full object-cover border-4 border-white shadow-lg group-hover:shadow-xl transition duration-500" />
-                </div>
-                <h3 class="text-xl font-bold text-gray-900 mb-1">{{ member.name }}</h3>
-                <p class="text-emerald-600 text-sm font-medium mb-4">{{ member.role }}</p>
-
-                <div class="flex justify-center gap-4 opacity-0 group-hover:opacity-100 transition duration-300">
-                    <a :href="member.github" class="text-gray-400 hover:text-gray-900 transition"><Github size="20" /></a>
-                    <a :href="member.linkedin" class="text-gray-400 hover:text-blue-700 transition"><Linkedin size="20" /></a>
-                </div>
-            </div>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <Card
+            v-for="(feature, index) in features"
+            :key="index"
+            class="group border-gray-800 bg-gray-900/50 backdrop-blur-xl hover:border-emerald-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/20"
+            data-animate="fade-up"
+          >
+            <CardHeader>
+              <div class="w-12 h-12 bg-gray-800/50 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <component :is="feature.icon" :class="feature.color" class="w-6 h-6" />
+              </div>
+              <CardTitle class="text-white">{{ feature.title }}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CardDescription class="text-gray-400">{{ feature.description }}</CardDescription>
+            </CardContent>
+          </Card>
         </div>
+      </div>
     </section>
 
-    <footer class="bg-black text-white py-12 rounded-t-[3rem]">
-        <div class="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center">
-            <div class="mb-6 md:mb-0">
-                <div class="text-2xl font-bold flex items-center gap-2">
-                    <div class="w-6 h-6 bg-emerald-500 rounded-full"></div>
-                    Smart Waste
-                </div>
-                <p class="text-gray-500 text-sm mt-2">© 2024 Team Enki. Engineering Project.</p>
-            </div>
-            <div class="flex gap-6 text-sm text-gray-400">
-                <a href="#" class="hover:text-white transition">Privacy</a>
-                <a href="#" class="hover:text-white transition">Documentation</a>
-                <a href="#" class="hover:text-white transition">GitHub</a>
-            </div>
+    <!-- Demo Section -->
+    <section class="py-20 relative">
+      <div class="container mx-auto px-6">
+        <div class="grid lg:grid-cols-2 gap-12 items-center">
+          <div data-animate="fade-up">
+            <Badge variant="outline" class="border-emerald-500/50 bg-emerald-500/10 text-emerald-400 mb-6">
+              REAL-TIME DASHBOARD
+            </Badge>
+            <h2 class="text-4xl font-bold text-white mb-6">
+              Monitor everything
+              <br />
+              <span class="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">in real-time</span>
+            </h2>
+            <p class="text-gray-400 text-lg mb-8">
+              Access our powerful dashboard to monitor all bins, view analytics, optimize routes, and make data-driven decisions instantly.
+            </p>
+            <Button
+              @click="navigateToDashboard"
+              size="lg"
+              class="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 shadow-lg shadow-emerald-500/50"
+            >
+              View Dashboard
+              <ArrowRight class="w-5 h-5 ml-2" />
+            </Button>
+          </div>
+
+          <div class="relative" data-animate="fade-up">
+            <Card class="border-gray-800 bg-gray-900/50 backdrop-blur-xl overflow-hidden">
+              <img
+                src="/src/assets/images/Litterbin-04-2560x1440.jpg"
+                alt="Dashboard Preview"
+                class="w-full h-[400px] object-cover"
+              />
+            </Card>
+            <div class="absolute -inset-4 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 blur-3xl -z-10"></div>
+          </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Team Section -->
+    <section id="team" class="py-20 relative">
+      <div class="container mx-auto px-6">
+        <div class="text-center mb-16" data-animate="fade-up">
+          <Badge variant="outline" class="border-emerald-500/50 bg-emerald-500/10 text-emerald-400 mb-4">
+            <Users class="w-3 h-3 mr-1" /> OUR TEAM
+          </Badge>
+          <h2 class="text-4xl font-bold text-white mb-4">Meet Team Enki</h2>
+          <p class="text-gray-400 text-lg max-w-2xl mx-auto">
+            A passionate group of engineers and researchers making cities cleaner and smarter
+          </p>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <Card
+            v-for="member in teamMembers"
+            :key="member.name"
+            class="group border-gray-800 bg-gray-900/50 backdrop-blur-xl hover:border-emerald-500/50 transition-all text-center"
+            data-animate="fade-up"
+          >
+            <CardContent class="p-6">
+              <div class="relative w-24 h-24 mx-auto mb-4">
+                <div class="w-full h-full rounded-2xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-gray-900 text-3xl font-bold shadow-lg shadow-emerald-500/50 group-hover:scale-105 transition">
+                  {{ member.name.charAt(0) }}
+                </div>
+              </div>
+              <h3 class="text-lg font-bold text-white mb-1">{{ member.name }}</h3>
+              <p class="text-emerald-400 text-sm font-medium mb-4">{{ member.role }}</p>
+              <div class="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition">
+                <Button size="sm" variant="ghost" class="w-8 h-8 p-0">
+                  <Github :size="16" />
+                </Button>
+                <Button size="sm" variant="ghost" class="w-8 h-8 p-0">
+                  <Linkedin :size="16" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="py-20 relative overflow-hidden">
+      <div class="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10"></div>
+      <div class="container mx-auto px-6 relative z-10">
+        <Card class="border-emerald-500/50 bg-gradient-to-br from-gray-900 to-gray-950 backdrop-blur-xl" data-animate="fade-up">
+          <CardContent class="p-12 text-center">
+            <h2 class="text-4xl md:text-5xl font-bold text-white mb-6">
+              Ready to revolutionize
+              <br />
+              <span class="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">waste management?</span>
+            </h2>
+
+            <p class="text-gray-400 text-lg mb-8 max-w-2xl mx-auto">
+              Join the smart cities revolution. Reduce costs, minimize environmental impact, and optimize operations with AI-powered insights.
+            </p>
+
+            <Button
+              @click="navigateToDashboard"
+              size="lg"
+              class="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white shadow-2xl shadow-emerald-500/50"
+            >
+              Start now
+              <ArrowRight class="w-5 h-5 ml-2" />
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-800 py-12 bg-gray-950">
+      <div class="container mx-auto px-6">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8">
+          <div class="mb-6 md:mb-0">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-xl flex items-center justify-center text-gray-900 font-bold shadow-lg shadow-emerald-500/50">
+                E
+              </div>
+              <span class="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">Enki</span>
+            </div>
+            <p class="text-gray-500 text-sm">© 2024 Team Enki. All rights reserved.</p>
+          </div>
+
+          <div class="flex gap-8">
+            <a href="#" class="text-gray-400 hover:text-emerald-400 transition text-sm">Home</a>
+            <a href="#features" class="text-gray-400 hover:text-emerald-400 transition text-sm">Features</a>
+            <a href="#team" class="text-gray-400 hover:text-emerald-400 transition text-sm">Team</a>
+            <a href="/dashboard" class="text-gray-400 hover:text-emerald-400 transition text-sm">Dashboard</a>
+          </div>
+        </div>
+
+        <div class="pt-8 border-t border-gray-800 flex flex-col md:flex-row justify-between items-center text-sm text-gray-500">
+          <p>🔒 100% Secure & Encrypted</p>
+          <div class="flex gap-6 mt-4 md:mt-0">
+            <a href="#" class="hover:text-emerald-400 transition">Terms</a>
+            <a href="#" class="hover:text-emerald-400 transition">Privacy</a>
+          </div>
+        </div>
+      </div>
     </footer>
 
   </div>
 </template>
+
+<style scoped>
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-animate] {
+  opacity: 0;
+}
+
+[data-animate].animate-fade-in {
+  animation: fadeIn 0.8s ease-out forwards;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+</style>

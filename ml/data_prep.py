@@ -17,7 +17,6 @@ import os
 def init_firebase():
     """Initialize Firebase Admin SDK"""
     if not firebase_admin._apps:
-        # Update this path to your service account key
         cred = credentials.Certificate("serviceAccountKey.json")
         firebase_admin.initialize_app(
             cred,
@@ -88,7 +87,6 @@ def compute_fill_rate(group):
     group["fill_diff"] = group["fill_level"].diff()
 
     # Calculate fill rate (percentage per hour)
-    # Avoid division by zero
     group["fill_rate"] = np.where(
         group["time_diff_hours"] > 0, group["fill_diff"] / group["time_diff_hours"], 0
     )
@@ -124,15 +122,11 @@ def compute_time_features(df):
     df["hour"] = df["datetime"].dt.hour
     df["weekday"] = df["datetime"].dt.weekday
     df["is_weekend"] = (df["weekday"] >= 5).astype(int)
-
     return df
 
 
 def compute_time_to_full(group):
-    """
-    Compute time to full (hours) for each record.
-    Looks forward in time to find when fill_level >= 100.
-    """
+    """Compute time to full (hours) for each record."""
     group = group.sort_values("timestamp").copy()
     time_to_full = []
 
@@ -141,7 +135,6 @@ def compute_time_to_full(group):
         current_fill = row["fill_level"]
 
         if current_fill >= 100:
-            # Already full
             time_to_full.append(0)
         else:
             # Look forward to find when it becomes full
@@ -149,19 +142,16 @@ def compute_time_to_full(group):
             full_records = future_data[future_data["fill_level"] >= 100]
 
             if len(full_records) > 0:
-                # Time to first full reading
                 time_to_full_seconds = full_records.iloc[0]["timestamp"] - current_time
                 time_to_full_hours = time_to_full_seconds / 3600
                 time_to_full.append(time_to_full_hours)
             else:
-                # No full reading found - estimate based on fill rate
+                # Estimate based on fill rate if no full record found
                 if row["fill_rate"] > 0:
                     remaining_capacity = 100 - current_fill
                     estimated_hours = remaining_capacity / row["fill_rate"]
-                    # Cap at reasonable maximum (e.g., 7 days)
                     time_to_full.append(min(estimated_hours, 168))
                 else:
-                    # No fill rate data, set to max
                     time_to_full.append(168)
 
     group["time_to_full_hours"] = time_to_full
@@ -177,6 +167,11 @@ def engineer_features(df):
 
     # Compute rolling statistics per bin
     df = df.groupby("bin_id", group_keys=False).apply(compute_rolling_features)
+
+    # FIX: Handle NaN values created by rolling windows (first few rows)
+    # Fill forward then backward to ensure no gaps
+    df = df.groupby("bin_id", group_keys=False).apply(lambda x: x.ffill().bfill())
+    df = df.fillna(0)  # Final safety net
 
     # Add time-based features
     df = compute_time_features(df)
@@ -198,36 +193,21 @@ def save_prepared_data(df, output_path="data/prepared_data.csv"):
     df.to_csv(output_path, index=False)
     print(f"Prepared data saved to {output_path}")
 
-    # Print summary statistics
     print("\n=== Dataset Summary ===")
     print(f"Total records: {len(df)}")
     print(f"Unique bins: {df['bin_id'].nunique()}")
-    print(f"Date range: {df['datetime'].min()} to {df['datetime'].max()}")
-    print(f"\nTarget statistics (time_to_full_hours):")
+    print(f"Target statistics (time_to_full_hours):")
     print(df["time_to_full_hours"].describe())
-    print(f"\nFeature columns: {list(df.columns)}")
 
 
 def main():
-    """Main execution function"""
     try:
-        # Initialize Firebase
         init_firebase()
-
-        # Fetch data
         df = fetch_historical_data()
-
-        # Clean data
         df = clean_data(df)
-
-        # Engineer features
         df = engineer_features(df)
-
-        # Save prepared data
         save_prepared_data(df)
-
         print("\n✓ Data preparation completed successfully!")
-
     except Exception as e:
         print(f"Error during data preparation: {e}")
         raise
