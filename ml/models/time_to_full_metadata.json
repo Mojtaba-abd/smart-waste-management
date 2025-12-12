@@ -1,5 +1,5 @@
 {
-  "trained_at": "2025-12-06T12:23:04.721050",
+  "trained_at": "2025-12-12T01:30:02.277244",
   "feature_columns": [
     "fill_level",
     "fill_rate",
@@ -12,40 +12,40 @@
   "target_column": "time_to_full_hours",
   "model_type": "RandomForestRegressor",
   "metrics": {
-    "train_mae": 34.35656581745906,
-    "train_rmse": 61.783009630608085,
-    "train_r2": 0.5506086301420928,
-    "val_mae": 45.18874252165319,
-    "val_rmse": 77.96019688700969,
-    "val_r2": 0.21057574818726255,
+    "train_mae": 45.50026699199259,
+    "train_rmse": 73.74837329699439,
+    "train_r2": 0.5239444303613369,
+    "val_mae": 61.08495559583503,
+    "val_rmse": 97.00086131073837,
+    "val_r2": 0.1894872954269805,
     "feature_importance": [
       {
-        "feature": "fill_level",
-        "importance": 0.2253321343517339
-      },
-      {
         "feature": "fill_rate_rolling_mean",
-        "importance": 0.21460439159487132
+        "importance": 0.24514498700465737
       },
       {
         "feature": "fill_rate",
-        "importance": 0.20784851957431802
+        "importance": 0.215040181569322
+      },
+      {
+        "feature": "fill_level",
+        "importance": 0.18304177685305628
       },
       {
         "feature": "fill_rate_rolling_std",
-        "importance": 0.1615672727796039
+        "importance": 0.17342441240967668
       },
       {
         "feature": "hour",
-        "importance": 0.12448316270948041
+        "importance": 0.12152933715056048
       },
       {
         "feature": "weekday",
-        "importance": 0.05619164438654074
+        "importance": 0.051276965119778674
       },
       {
         "feature": "is_weekend",
-        "importance": 0.009972874603451587
+        "importance": 0.010542339892948492
       }
     ]
   }

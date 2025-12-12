@@ -1,8 +1,7 @@
 """
-Route Optimization Module
-Reads predictions from Firebase, selects bins that need collection,
-computes optimal collection route using Google OR-Tools TSP solver,
-and writes route back to Firebase.
+Route Optimization Module (Simple & Robust)
+Selects the most urgent bins (Physical Fill > 80% OR Predicted Full < 12h)
+and calculates a route starting from the Depot.
 """
 
 import numpy as np
@@ -12,19 +11,17 @@ from firebase_admin import credentials, db
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
 import time
-import json
 from math import radians, cos, sin, asin, sqrt
 
-# Depot location (Baghdad example)
+# Configuration
 DEPOT_LAT = 33.5731
 DEPOT_LON = 44.3668
+TIME_THRESHOLD = 12  # Prediction urgency threshold
+FILL_THRESHOLD = 80  # Physical fill urgency threshold
+MAX_BINS_PER_ROUTE = 20  # Truck capacity
 
-# Threshold for urgent collection (hours)
-TIME_THRESHOLD = 12
-MAX_BINS_PER_ROUTE = 20
 
 def init_firebase():
-    """Initialize Firebase Admin SDK"""
     if not firebase_admin._apps:
         cred = credentials.Certificate("serviceAccountKey.json")
         firebase_admin.initialize_app(
@@ -34,228 +31,215 @@ def init_firebase():
             },
         )
 
-def haversine_distance(lat1, lon1, lat2, lon2):
-    """
-    Calculate the great circle distance between two points
-    on the earth (specified in decimal degrees).
-    Returns distance in kilometers.
-    """
-    # Convert decimal degrees to radians
-    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
 
-    # Haversine formula
+def haversine_distance(lat1, lon1, lat2, lon2):
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
     dlon = lon2 - lon1
     dlat = lat2 - lat1
     a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
     c = 2 * asin(sqrt(a))
-    r = 6371 # Radius of earth in kilometers
+    r = 6371
     return c * r
 
-def fetch_predictions():
-    """Fetch all predictions from Firebase"""
-    print("Fetching predictions from Firebase...")
-    ref = db.reference("/predictions")
-    predictions = ref.get()
 
-    if not predictions:
-        print("No predictions found")
+def fetch_predictions():
+    print("Fetching predictions...")
+    ref = db.reference("/predictions")
+    data = ref.get()
+    if not data:
         return pd.DataFrame()
 
     records = []
-    for bin_id, data in predictions.items():
-        record = {
-            "bin_id": bin_id,
-            "time_to_full_h": data.get("time_to_full_h", 999),
-            "fill_level": data.get("fill_level", 0),
-            "predicted_at": data.get("predicted_at", 0),
-        }
-        records.append(record)
+    for bin_id, d in data.items():
+        records.append(
+            {
+                "bin_id": bin_id,
+                "time_to_full_h": d.get("time_to_full_h", 999),
+                "fill_level": d.get("fill_level", 0),
+            }
+        )
+    return pd.DataFrame(records)
 
-    df = pd.DataFrame(records)
-    print(f"Fetched predictions for {len(df)} bins")
-    return df
 
 def fetch_bin_locations(bin_ids):
-    """Fetch location data for specific bins"""
-    print(f"Fetching locations for {len(bin_ids)} bins...")
+    print("Fetching locations...")
     locations = []
     ref = db.reference("/bins")
-
     for bin_id in bin_ids:
-        bin_data = ref.child(bin_id).get()
-        if bin_data:
-            locations.append({
-                "bin_id": bin_id,
-                "latitude": bin_data.get("latitude", 0),
-                "longitude": bin_data.get("longitude", 0),
-            })
-
+        d = ref.child(bin_id).get()
+        if d:
+            locations.append(
+                {
+                    "bin_id": bin_id,
+                    "latitude": d.get("latitude", 0),
+                    "longitude": d.get("longitude", 0),
+                }
+            )
     return pd.DataFrame(locations)
 
-def select_bins_for_collection(predictions_df, threshold=TIME_THRESHOLD, max_bins=MAX_BINS_PER_ROUTE):
-    """Select bins based on urgency"""
-    print(f"\nSelecting bins with time_to_full <= {threshold} hours...")
-    
-    urgent_bins = predictions_df[predictions_df["time_to_full_h"] <= threshold].copy()
 
-    if len(urgent_bins) == 0:
-        print(f"No urgent bins found. Selecting top {max_bins} almost full bins...")
-        urgent_bins = predictions_df.nsmallest(max_bins, "time_to_full_h").copy()
-    elif len(urgent_bins) > max_bins:
-        print(f"Found {len(urgent_bins)} urgent bins. Selecting {max_bins} most urgent...")
-        urgent_bins = urgent_bins.nsmallest(max_bins, "time_to_full_h")
+def select_bins(predictions_df, locations_df):
+    """
+    Simple Selection Logic:
+    1. Filter bins that are > 80% full OR < 12h to full.
+    2. If too many, pick the ones with highest fill level.
+    """
+    # Merge data
+    df = pd.merge(predictions_df, locations_df, on="bin_id", how="inner")
 
-    urgent_bins = urgent_bins.sort_values("time_to_full_h")
-    print(f"Selected {len(urgent_bins)} bins for collection")
+    # Filter for urgency
+    urgent_mask = (df["fill_level"] >= FILL_THRESHOLD) | (
+        df["time_to_full_h"] <= TIME_THRESHOLD
+    )
+    urgent_bins = df[urgent_mask].copy()
+
+    # Fallback: If nothing is "urgent", pick the top 5 fullest bins just to show a route exists
+    if urgent_bins.empty:
+        print("🟡 No critical bins found. Picking top 5 fullest bins for demo.")
+        urgent_bins = df.nlargest(5, "fill_level")
+
+    # Cap at Max Bins (prioritize physical fill level)
+    if len(urgent_bins) > MAX_BINS_PER_ROUTE:
+        urgent_bins = urgent_bins.nlargest(MAX_BINS_PER_ROUTE, "fill_level")
+
+    print(f"✅ Selected {len(urgent_bins)} bins for routing.")
     return urgent_bins
 
+
 def create_distance_matrix(locations_df):
-    """Create distance matrix in meters"""
-    print("\nCreating distance matrix...")
     coords = [(DEPOT_LAT, DEPOT_LON)]
-    for idx, row in locations_df.iterrows():
+    for _, row in locations_df.iterrows():
         coords.append((row["latitude"], row["longitude"]))
 
     n = len(coords)
-    distance_matrix = np.zeros((n, n))
-
+    matrix = np.zeros((n, n))
     for i in range(n):
         for j in range(n):
             if i != j:
-                lat1, lon1 = coords[i]
-                lat2, lon2 = coords[j]
-                distance_matrix[i][j] = haversine_distance(lat1, lon1, lat2, lon2) * 1000
+                matrix[i][j] = (
+                    haversine_distance(
+                        coords[i][0], coords[i][1], coords[j][0], coords[j][1]
+                    )
+                    * 1000
+                )
+    return matrix.astype(int)
 
-    print(f"Distance matrix created: {n}x{n} locations")
-    return distance_matrix.astype(int)
 
-def solve_tsp(distance_matrix):
-    """Solve TSP using OR-Tools"""
-    print("\nSolving TSP with OR-Tools...")
-    
-    # 1. Create Routing Model
-    manager = pywrapcp.RoutingIndexManager(len(distance_matrix), 1, 0) # 1 vehicle, starts at node 0
+def solve_tsp(matrix):
+    print("Solving TSP...")
+    manager = pywrapcp.RoutingIndexManager(len(matrix), 1, 0)
     routing = pywrapcp.RoutingModel(manager)
 
-    # 2. Define Cost Function (Distance)
-    def distance_callback(from_index, to_index):
-        from_node = manager.IndexToNode(from_index)
-        to_node = manager.IndexToNode(to_index)
-        return distance_matrix[from_node][to_node]
+    def dist_callback(i, j):
+        return matrix[manager.IndexToNode(i)][manager.IndexToNode(j)]
 
-    transit_callback_index = routing.RegisterTransitCallback(distance_callback)
-    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+    transit_idx = routing.RegisterTransitCallback(dist_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(transit_idx)
 
-    # 3. Parameters
-    search_parameters = pywrapcp.DefaultRoutingSearchParameters()
-    search_parameters.first_solution_strategy = (
+    params = pywrapcp.DefaultRoutingSearchParameters()
+    params.first_solution_strategy = (
         routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
     )
-    search_parameters.time_limit.seconds = 30
+    params.time_limit.seconds = 10
 
-    # 4. Solve
-    solution = routing.SolveWithParameters(search_parameters)
-
+    solution = routing.SolveWithParameters(params)
     if not solution:
-        print("No solution found!")
-        return None, None
+        return None, 0
 
-    # 5. Extract Route
     route = []
-    total_distance = 0
     index = routing.Start(0)
-
+    total_dist = 0
     while not routing.IsEnd(index):
-        node = manager.IndexToNode(index)
-        route.append(node)
-        previous_index = index
+        route.append(manager.IndexToNode(index))
+        prev = index
         index = solution.Value(routing.NextVar(index))
-        total_distance += routing.GetArcCostForVehicle(previous_index, index, 0)
+        total_dist += routing.GetArcCostForVehicle(prev, index, 0)
 
-    route.append(manager.IndexToNode(index)) # Add end node
-    print(f"Optimal route found! Distance: {total_distance / 1000:.2f} km")
-    return route, total_distance
+    route.append(manager.IndexToNode(index))
+    return route, total_dist
 
-def format_route(route, locations_df, predictions_df):
-    """Format route for Firebase"""
+
+def save_route(route, locations_df, predictions_df):
+    print("Saving to Firebase...")
+    stops = []
+    total_dist = 0
+
+    for i, idx in enumerate(route):
+        if idx == 0:
+            stops.append(
+                {
+                    "order": i,
+                    "type": "depot",
+                    "latitude": DEPOT_LAT,
+                    "longitude": DEPOT_LON,
+                    "bin_id": "DEPOT",
+                }
+            )
+        else:
+            row = locations_df.iloc[idx - 1]
+            pred = predictions_df[predictions_df["bin_id"] == row["bin_id"]].iloc[0]
+
+            # Calculate distance from previous stop
+            dist_from_prev = 0
+            if i > 0:
+                prev = stops[-1]
+                dist_from_prev = haversine_distance(
+                    prev["latitude"],
+                    prev["longitude"],
+                    row["latitude"],
+                    row["longitude"],
+                )
+                total_dist += dist_from_prev
+
+            stops.append(
+                {
+                    "order": i,
+                    "type": "bin",
+                    "bin_id": row["bin_id"],
+                    "latitude": float(row["latitude"]),
+                    "longitude": float(row["longitude"]),
+                    "fill_level": float(pred["fill_level"]),
+                    "dist_km": round(dist_from_prev, 2),
+                }
+            )
+
     route_data = {
-        "stops": [],
-        "total_distance_km": 0,
-        "total_bins": len(route) - 2,
+        "stops": stops,
+        "total_distance_km": round(total_dist, 2),
+        "total_bins": len(stops) - 2,  # Exclude start/end depot
         "created_at": int(time.time()),
     }
 
-    total_dist = 0
+    # Save to route_1 so dashboard finds it easily
+    db.reference("/routes/route_1").set(route_data)
+    print("✓ Route saved to /routes/route_1")
 
-    for i, node_idx in enumerate(route):
-        if node_idx == 0:
-            stop = {
-                "order": i,
-                "type": "depot",
-                "bin_id": "DEPOT",
-                "latitude": DEPOT_LAT,
-                "longitude": DEPOT_LON,
-            }
-        else:
-            # Bin (node_idx - 1 because bins start at index 0 in locations_df)
-            bin_row = locations_df.iloc[node_idx - 1]
-            bin_id = bin_row["bin_id"]
-            pred_row = predictions_df[predictions_df["bin_id"] == bin_id].iloc[0]
-
-            stop = {
-                "order": i,
-                "type": "bin",
-                "bin_id": bin_id,
-                "latitude": float(bin_row["latitude"]),
-                "longitude": float(bin_row["longitude"]),
-                "time_to_full_h": float(pred_row["time_to_full_h"]),
-                "fill_level": float(pred_row["fill_level"]),
-            }
-
-            if i > 0:
-                prev_stop = route_data["stops"][-1]
-                dist = haversine_distance(
-                    prev_stop["latitude"], prev_stop["longitude"],
-                    stop["latitude"], stop["longitude"]
-                )
-                stop["distance_from_previous_km"] = round(dist, 2)
-                total_dist += dist
-
-        route_data["stops"].append(stop)
-
-    route_data["total_distance_km"] = round(total_dist, 2)
-    return route_data
-
-def save_route_to_firebase(route_data):
-    """Save to Firebase"""
-    print("\nSaving route to Firebase...")
-    ref = db.reference("/routes/route_1")
-    ref.set(route_data)
-    print("Route saved successfully!")
 
 def main():
     try:
-        start_time = time.time()
         init_firebase()
+        preds = fetch_predictions()
+        if preds.empty:
+            return {"status": "error", "message": "No predictions"}
 
-        predictions_df = fetch_predictions()
-        if predictions_df.empty: return
+        # Select all bins needed for routing
+        all_locs = fetch_bin_locations(preds["bin_id"].tolist())
+        selected = select_bins(preds, all_locs)
 
-        selected_bins = select_bins_for_collection(predictions_df)
-        if selected_bins.empty: return
+        if len(selected) < 1:
+            return {"status": "success", "message": "No bins need collection"}
 
-        locations_df = fetch_bin_locations(selected_bins["bin_id"].tolist())
-        distance_matrix = create_distance_matrix(locations_df)
-        
-        route, _ = solve_tsp(distance_matrix)
+        matrix = create_distance_matrix(selected)
+        route, _ = solve_tsp(matrix)
+
         if route:
-            route_data = format_route(route, locations_df, selected_bins)
-            save_route_to_firebase(route_data)
-            print(f"\n✓ Optimization done in {time.time() - start_time:.2f}s")
+            save_route(route, selected, preds)
+            return {"status": "success"}
 
     except Exception as e:
         print(f"Error: {e}")
-        raise
+        return {"status": "error", "message": str(e)}
+
 
 if __name__ == "__main__":
     main()

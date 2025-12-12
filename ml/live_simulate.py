@@ -1,7 +1,6 @@
 """
-Live Data Simulation Script
-Continuously simulates ESP32 devices sending real-time bin data to Firebase.
-Updates bins every few seconds to mimic actual waste accumulation.
+Live Data Simulation Script (FAST MODE)
+Adds specific area assignment to bins.
 """
 
 import os
@@ -16,20 +15,23 @@ from datetime import datetime
 
 # Configuration
 NUM_BINS = 25
-UPDATE_INTERVAL = 3  # seconds between updates
-COLLECTION_CHECK_INTERVAL = 60  # seconds between checking for collections
+UPDATE_INTERVAL = 1.0  # seconds between updates
+COLLECTION_CHECK_INTERVAL = 20  # seconds between checking for collections
 
 # Geographic boundaries (Baghdad area example)
 LAT_MIN, LAT_MAX = 33.2, 33.4
 LON_MIN, LON_MAX = 44.3, 44.5
 
+# CHANGED: Define specific collection areas
+AREAS = ["Central", "North", "South", "East", "West"]
+
 # Fill rate profiles (percentage increase per update interval)
 FILL_PROFILES = {
-    "residential_high": (0.5, 1.5),  # Fast filling
-    "residential_low": (0.2, 0.6),  # Moderate filling
-    "commercial": (1.0, 2.5),  # Very fast
-    "park": (0.1, 0.4),  # Slow filling
-    "industrial": (0.4, 1.0),  # Moderate to fast
+    "residential_high": (2.0, 4.0),
+    "residential_low": (1.0, 2.0),
+    "commercial": (3.0, 7.0),
+    "park": (0.5, 1.5),
+    "industrial": (1.5, 3.5),
 }
 
 # Global state
@@ -68,14 +70,18 @@ def generate_bins(num_bins):
         lat = random.uniform(LAT_MIN, LAT_MAX)
         lon = random.uniform(LON_MIN, LON_MAX)
 
+        # CHANGED: Assign a random area
+        area = random.choice(AREAS)
+
         # Random profile and starting fill level
         profile = random.choice(profiles)
-        fill_level = random.uniform(0, 40)  # Start with 0-40% full
+        fill_level = random.uniform(0, 60)
 
         bin_state = {
             "bin_id": bin_id,
             "latitude": lat,
             "longitude": lon,
+            "area": area,  # ADDED: Area field
             "profile": profile,
             "base_fill_rate": random.uniform(*FILL_PROFILES[profile]),
             "fill_level": fill_level,
@@ -96,13 +102,13 @@ def calculate_fill_rate_modifier():
 
     modifier = 1.0
 
-    # Peak hours (meal times) - more waste
+    # Peak hours (meal times)
     if 7 <= hour <= 9 or 12 <= hour <= 14 or 18 <= hour <= 21:
         modifier *= random.uniform(1.3, 1.8)
 
-    # Night hours - less waste
+    # Night hours
     elif 22 <= hour or hour <= 6:
-        modifier *= random.uniform(0.2, 0.5)
+        modifier *= random.uniform(0.5, 0.8)
 
     # Weekend variation
     if weekday >= 5:
@@ -116,21 +122,14 @@ def calculate_fill_rate_modifier():
 
 def should_collect_bin(bin_state):
     """Determine if bin should be collected"""
-    # Collect if very full
-    if bin_state["fill_level"] >= 95:
+    if bin_state["fill_level"] >= 98:
         return True
-
-    # Probabilistic collection for bins 80-95% full
-    if bin_state["fill_level"] >= 80:
-        collection_prob = (bin_state["fill_level"] - 80) / 15 * 0.5
-        return random.random() < collection_prob
-
     return False
 
 
 def collect_bin(bin_state):
     """Simulate bin collection"""
-    bin_state["fill_level"] = random.uniform(0, 5)  # Nearly empty after collection
+    bin_state["fill_level"] = random.uniform(0, 5)
     bin_state["last_collection"] = int(time.time())
     bin_state["total_collections"] += 1
     return True
@@ -138,15 +137,9 @@ def collect_bin(bin_state):
 
 def update_bin(bin_state):
     """Update a single bin's fill level"""
-    # Calculate fill rate with time-based modifiers
     fill_rate = bin_state["base_fill_rate"] * calculate_fill_rate_modifier()
-
-    # Update fill level
     bin_state["fill_level"] += fill_rate
-
-    # Cap at 100%
     bin_state["fill_level"] = min(100, bin_state["fill_level"])
-
     return bin_state
 
 
@@ -161,13 +154,15 @@ def write_to_firebase(bin_state, write_history=True):
         "fill_level": round(bin_state["fill_level"], 2),
         "latitude": round(bin_state["latitude"], 6),
         "longitude": round(bin_state["longitude"], 6),
+        "area": bin_state["area"],  # ADDED: Write area to /bins
         "timestamp": timestamp,
     }
     bins_ref.set(current_data)
 
     # Historical data to /history
     if write_history:
-        history_ref = db.reference(f"/history/{bin_id}/{timestamp}")
+        day_key = str(datetime.now().day)
+        history_ref = db.reference(f"/history/{day_key}/{bin_id}/{timestamp}")
         history_ref.set(current_data)
 
 
@@ -176,28 +171,28 @@ def print_status(bins_state, collections_this_round):
     os.system("clear" if sys.platform != "win32" else "cls")
 
     print("=" * 80)
-    print("🚮 LIVE WASTE BIN SIMULATION")
+    print("🚀 FAST LIVE WASTE BIN SIMULATION")
     print("=" * 80)
     print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Active Bins: {len(bins_state)}")
     print(f"Update Interval: {UPDATE_INTERVAL}s")
     print(f"Collections This Round: {collections_this_round}")
     print("=" * 80)
-    print()
+
+    # ... (rest of print_status remains the same) ...
 
     # Sort bins by fill level (highest first)
     sorted_bins = sorted(bins_state, key=lambda x: x["fill_level"], reverse=True)
 
     # Print header
     print(
-        f"{'Bin ID':<12} {'Fill %':<10} {'Profile':<18} {'Collections':<12} {'Status'}"
+        f"{'Bin ID':<12} {'Fill %':<10} {'Area':<10} {'Profile':<15} {'Collections':<12} {'Status'}"
     )
     print("-" * 80)
 
     for bin_state in sorted_bins:
         fill_level = bin_state["fill_level"]
 
-        # Status indicator
         if fill_level >= 90:
             status = "🔴 CRITICAL"
         elif fill_level >= 70:
@@ -207,7 +202,6 @@ def print_status(bins_state, collections_this_round):
         else:
             status = "🟢 LOW"
 
-        # Fill level bar
         bar_length = 20
         filled = int((fill_level / 100) * bar_length)
         bar = "█" * filled + "░" * (bar_length - filled)
@@ -215,7 +209,8 @@ def print_status(bins_state, collections_this_round):
         print(
             f"{bin_state['bin_id']:<12} "
             f"{fill_level:>5.1f}% {bar} "
-            f"{bin_state['profile']:<18} "
+            f"{bin_state['area']:<10} "  # ADDED: Print Area
+            f"{bin_state['profile']:<15} "
             f"{bin_state['total_collections']:<12} "
             f"{status}"
         )
@@ -235,31 +230,23 @@ def main():
     """Main live simulation loop"""
     global running, bins_state
 
-    # Register signal handler for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
 
     try:
-        print("🚀 Starting Live Waste Bin Simulation...")
-        print()
-
-        # Initialize Firebase
+        print("🚀 Starting FAST Live Waste Bin Simulation...")
         init_firebase()
         print("✓ Connected to Firebase")
 
-        # Generate bins
         bins_state = generate_bins(NUM_BINS)
         print(f"✓ Generated {NUM_BINS} bins")
 
-        # Write initial states
         print("✓ Writing initial states to Firebase...")
         for bin_state in bins_state:
             write_to_firebase(bin_state, write_history=True)
 
         print("✓ Simulation started!")
-        print()
-        time.sleep(2)
+        time.sleep(1)
 
-        # Main simulation loop
         iteration = 0
         last_collection_check = time.time()
 
@@ -267,9 +254,7 @@ def main():
             iteration += 1
             collections_this_round = 0
 
-            # Update all bins
             for bin_state in bins_state:
-                # Check for collection
                 current_time = time.time()
                 if (current_time - last_collection_check) >= COLLECTION_CHECK_INTERVAL:
                     if should_collect_bin(bin_state):
@@ -278,24 +263,16 @@ def main():
                         collections_this_round += 1
                         print_collection_event(bin_state["bin_id"], old_fill)
 
-                # Update fill level
                 update_bin(bin_state)
+                write_to_firebase(bin_state, write_history=(iteration % 10 == 0))
 
-                # Write to Firebase
-                write_to_firebase(bin_state, write_history=(iteration % 6 == 0))
-
-            # Update last collection check time
             if (time.time() - last_collection_check) >= COLLECTION_CHECK_INTERVAL:
                 last_collection_check = time.time()
 
-            # Print status
             print_status(bins_state, collections_this_round)
-
-            # Wait before next update
             time.sleep(UPDATE_INTERVAL)
 
         print("\n✓ Simulation stopped gracefully")
-        print(f"Total iterations: {iteration}")
 
     except Exception as e:
         print(f"\n❌ Error during simulation: {e}")

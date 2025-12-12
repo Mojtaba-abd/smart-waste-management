@@ -60,7 +60,16 @@ def clean_data(df):
     # Convert timestamp to datetime
     df["datetime"] = pd.to_datetime(df["timestamp"], unit="s")
 
-    # Remove invalid fill levels
+    # --- FIX START ---
+    # 1. Force convert fill_level to numeric.
+    # 'coerce' turns invalid strings (like "error" or "null") into NaN
+    df["fill_level"] = pd.to_numeric(df["fill_level"], errors="coerce")
+
+    # 2. Drop rows where fill_level became NaN (because they were bad strings)
+    df = df.dropna(subset=["fill_level"])
+    # --- FIX END ---
+
+    # Remove invalid fill levels (Now safe because everything is a number)
     df = df[(df["fill_level"] >= 0) & (df["fill_level"] <= 100)]
 
     # Remove rows with missing critical data
