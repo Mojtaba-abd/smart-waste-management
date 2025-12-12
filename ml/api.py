@@ -59,4 +59,4 @@ def run_inference():
 
 if __name__ == "__main__":
     print("🔥 Smart Waste ML Server running on http://localhost:5000")
-    app.run(debug=True, port=5000)
+    app.run(port=5000)
