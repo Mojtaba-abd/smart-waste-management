@@ -32,7 +32,7 @@ def run_optimization():
         )
     except Exception as e:
         print(f"❌ Error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "An internal error has occurred."}), 500
 
 
 @app.route("/run-inference", methods=["POST"])
@@ -54,7 +54,7 @@ def run_inference():
         )
     except Exception as e:
         print(f"❌ Error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "An internal error has occurred."}), 500
 
 
 if __name__ == "__main__":
