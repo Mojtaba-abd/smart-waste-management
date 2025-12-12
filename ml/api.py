@@ -33,7 +33,7 @@ def run_optimization():
         )
     except Exception as e:
         print(f"❌ Error: {e}")
-        traceback.print_exc()
+        traceback.print_exc()  # Kept this for better debugging
         return jsonify({"status": "error", "message": "An internal error has occurred."}), 500
 
 
@@ -56,10 +56,10 @@ def run_inference():
         )
     except Exception as e:
         print(f"❌ Error: {e}")
-        traceback.print_exc()
+        traceback.print_exc()  # Kept this for better debugging
         return jsonify({"status": "error", "message": "An internal error has occurred."}), 500
 
 
 if __name__ == "__main__":
     print("🔥 Smart Waste ML Server running on http://localhost:5000")
-    app.run(debug=True, port=5000)
+    app.run(port=5000)
