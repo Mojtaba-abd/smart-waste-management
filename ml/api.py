@@ -2,6 +2,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 import sys
 import os
+import traceback
 
 # Import your existing scripts
 # These must be in the same folder as api.py
@@ -32,7 +33,8 @@ def run_optimization():
         )
     except Exception as e:
         print(f"❌ Error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        traceback.print_exc()  # Kept this for better debugging
+        return jsonify({"status": "error", "message": "An internal error has occurred."}), 500
 
 
 @app.route("/run-inference", methods=["POST"])
@@ -54,9 +56,10 @@ def run_inference():
         )
     except Exception as e:
         print(f"❌ Error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        traceback.print_exc()  # Kept this for better debugging
+        return jsonify({"status": "error", "message": "An internal error has occurred."}), 500
 
 
 if __name__ == "__main__":
     print("🔥 Smart Waste ML Server running on http://localhost:5000")
-    app.run(debug=True, port=5000)
+    app.run(port=5000)
