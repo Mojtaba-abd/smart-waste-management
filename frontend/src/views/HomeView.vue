@@ -34,28 +34,28 @@ onMounted(() => {
 // Team members data
 const teamMembers = [
   {
-    name: "Mujtaba",
+    name: "Mujtaba Abdulmuttalib",
     role: "Lead Developer & Architect",
     image: "/images/team/mujtaba.jpg", // <--- Add your image path here
     github: "#",
     linkedin: "#"
   },
   {
-    name: "Hussein",
+    name: "Hussein Ali",
     role: "Hardware & IoT Specialist",
     image: "/images/team/hussein.jpg",
     github: "#",
     linkedin: "#"
   },
   {
-    name: "Mustafa",
+    name: "Mustafa Safa",
     role: "Hardware & IoT Specialist",
     image: "/images/team/mustafa.jpg",
     github: "#",
     linkedin: "#"
   },
   {
-    name: "Zanib",
+    name: "Zainab Haidar",
     role: "Project Manager & Research",
     image: "/images/team/zanib.jpg",
     github: "#",
