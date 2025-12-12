@@ -332,10 +332,10 @@ def print_route_details(route_data):
     for stop in route_data["stops"]:
         if stop["type"] == "depot":
             print(f"Stop {stop['order']}: DEPOT")
-            print(f"  Location: ({stop['latitude']:.4f}, {stop['longitude']:.4f})")
+            print("  Location: [REDACTED]")
         else:
             print(f"Stop {stop['order']}: Bin {stop['bin_id']}")
-            print(f"  Location: ({stop['latitude']:.4f}, {stop['longitude']:.4f})")
+            print("  Location: [REDACTED]")
             print(f"  Fill Level: {stop['fill_level']:.1f}%")
             print(f"  Time to Full: {stop['time_to_full_h']:.1f} hours")
             if "distance_from_previous_km" in stop:
