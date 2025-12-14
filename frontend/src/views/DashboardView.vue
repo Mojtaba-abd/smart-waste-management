@@ -2,9 +2,9 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  LayoutDashboard, Map as MapIcon, Truck, BarChart3,  Menu,
+  LayoutDashboard, Map as MapIcon, Truck, BarChart3, Menu,
   Wifi, AlertTriangle, Cpu, LogOut, X, Loader2, Brain, Zap, Clock,
-   Activity, Eye, EyeOff
+  Activity, Eye, EyeOff
 } from 'lucide-vue-next'
 
 import 'leaflet/dist/leaflet.css'
@@ -34,13 +34,13 @@ const predictions = ref([])
 const activeRoute = ref(null)
 const mapInstance = ref(null)
 const mapMarkers = ref([]) // Bin markers
-const routeMarkers = ref([]) // Route stop markers (1, 2, 3...)
+const routeMarkers = ref([]) // Route stop markers (S, E, 1, 2...)
 const routePolyline = ref(null)
 
 // --- UI STATE ---
 const isOptimizing = ref(false)
-const showRoute = ref(true) // Controls route visibility
 const isPredicting = ref(false)
+const showRoute = ref(true) // Controls route visibility
 
 // --- COMPUTED STATS ---
 const activeSensors = computed(() => bins.value.length)
@@ -73,7 +73,10 @@ const handleOptimize = async () => {
   try {
     const response = await fetch('http://127.0.0.1:5000/run-optimization', { method: 'POST' })
     const data = await response.json()
-    if (data.status === 'success') alert("✅ Routes Optimized!")
+    if (data.status === 'success') {
+        alert("✅ Routes Optimized!")
+        showRoute.value = true // Auto-show route
+    }
     else alert("❌ Error: " + data.message)
   } catch (error) { alert("❌ Is 'python api.py' running?") }
   finally { isOptimizing.value = false }
@@ -106,7 +109,10 @@ const timeAgo = (timestamp) => {
 
 // --- MAP LOGIC ---
 const initMap = () => {
-  if (mapInstance.value) return;
+  if (mapInstance.value) {
+    mapInstance.value.invalidateSize()
+    return
+  }
 
   nextTick(() => {
     const mapContainer = document.getElementById('map')
@@ -122,16 +128,23 @@ const initMap = () => {
       maxZoom: 20
     }).addTo(mapInstance.value)
 
+    // FIX: Resize listener to prevent drifting markers
     setTimeout(() => { mapInstance.value.invalidateSize() }, 200)
+    window.addEventListener('resize', () => {
+        if(mapInstance.value) mapInstance.value.invalidateSize()
+    })
 
     updateMapMarkers()
     drawRoute()
   })
 }
 
-// 1. Draw Bin Dots
+// 1. Draw Bin Dots (The Simple Colored Dots)
 const updateMapMarkers = () => {
   if (!mapInstance.value) return
+
+  // FIX: Close popups to prevent "map is null" crash
+  mapInstance.value.closePopup()
 
   mapMarkers.value.forEach(marker => marker.remove())
   mapMarkers.value = []
@@ -158,16 +171,17 @@ const updateMapMarkers = () => {
     }
   })
 
-  if (!activeRoute.value && mapMarkers.value.length > 0) {
+  // Fit bounds only if no route is active
+  if ((!activeRoute.value || !showRoute.value) && mapMarkers.value.length > 0) {
     mapInstance.value.fitBounds(bounds, { padding: [50, 50] })
   }
 }
 
-// 2. Draw Route (Dotted Line + Numbers + Toggle Logic)
+// 2. Draw Route (Dotted Line + Numbered Markers)
 const drawRoute = () => {
   if (!mapInstance.value) return
 
-  // 1. CLEANUP: Always remove old layers first
+  // Cleanup old layers
   if (routePolyline.value) {
     routePolyline.value.remove()
     routePolyline.value = null
@@ -175,10 +189,9 @@ const drawRoute = () => {
   routeMarkers.value.forEach(m => m.remove())
   routeMarkers.value = []
 
-  // 2. CHECK VISIBILITY: If hidden or no route, stop here
+  // Check visibility
   if (!showRoute.value || !activeRoute.value) return
 
-  // 3. DRAW: Create the path
   const path = activeRoute.value.map(stop => [stop.latitude, stop.longitude])
 
   if (path.length > 0) {
@@ -187,7 +200,7 @@ const drawRoute = () => {
         color: '#38bdf8',
         weight: 4,
         opacity: 0.9,
-        dashArray: '10, 5' // <--- Gives it the dotted look
+        dashArray: '10, 5' // <--- Dotted Effect
     }).addTo(mapInstance.value)
 
     // B. Draw Numbered Markers (Start, 1, 2... End)
@@ -226,17 +239,25 @@ const drawRoute = () => {
     mapInstance.value.fitBounds(routePolyline.value.getBounds(), { padding: [50, 50] })
   }
 }
-// Fix: Destroy map when leaving tab
+
+// Improved Watchers (Fixes crashing)
 watch(currentTab, (newTab) => {
   if (newTab === 'map') {
     setTimeout(initMap, 100)
   } else {
     if (mapInstance.value) {
+      mapInstance.value.closePopup()
       mapInstance.value.remove()
       mapInstance.value = null
     }
   }
 })
+
+// Auto-redraw on sidebar toggle to fix size
+watch(isSidebarOpen, () => {
+    setTimeout(() => { if(mapInstance.value) mapInstance.value.invalidateSize() }, 300)
+})
+
 watch(showRoute, () => { if (currentTab.value === 'map') drawRoute() })
 watch(bins, () => { if (currentTab.value === 'map') updateMapMarkers() }, { deep: true })
 watch(activeRoute, () => { if (currentTab.value === 'map') drawRoute() }, { deep: true })
@@ -244,12 +265,11 @@ watch(activeRoute, () => { if (currentTab.value === 'map') drawRoute() }, { deep
 
 // --- FIREBASE LISTENERS ---
 onMounted(() => {
-// 1. Listen to Bins (Fixed for String vs Number issue)
+  // 1. Listen to Bins (With String-to-Number fix)
   onValue(dbRef(db, 'bins'), (snapshot) => {
     const data = snapshot.val()
     if (data) {
       bins.value = Object.keys(data).map(key => {
-        // FORCE CONVERT TO NUMBERS
         const lat = parseFloat(data[key].latitude || 0)
         const lng = parseFloat(data[key].longitude || 0)
         const fill = parseFloat(data[key].fill_level || 0)
@@ -258,7 +278,6 @@ onMounted(() => {
           id: key,
           rawLat: lat,
           rawLng: lng,
-          // Now .toFixed() will work because 'lat' is definitely a number
           location: `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`,
           fillLevel: Math.round(fill),
           status: getStatus(fill),
@@ -268,6 +287,8 @@ onMounted(() => {
       }).sort((a, b) => b.fillLevel - a.fillLevel)
     }
   })
+
+  // 2. Predictions
   onValue(dbRef(db, 'predictions'), (snapshot) => {
     const data = snapshot.val()
     if (data) {
@@ -282,6 +303,7 @@ onMounted(() => {
     }
   })
 
+  // 3. Routes
   onValue(dbRef(db, 'routes'), (snapshot) => {
     const allRoutes = snapshot.val()
     if (allRoutes) {
@@ -298,6 +320,7 @@ onMounted(() => {
     }
   })
 
+  // 4. History
   onValue(dbRef(db, 'history'), (snapshot) => {
     const data = snapshot.val()
     if (data) {
@@ -503,6 +526,7 @@ const setTab = (tab) => {
                 </div>
             </Card>
         </div>
+
         <div v-if="currentTab === 'fleet'" class="animate-in fade-in slide-in-from-right-10 duration-500 space-y-6">
             <Card class="bg-gray-900 border-gray-800">
                 <CardHeader><CardTitle class="text-white">Fleet Optimization</CardTitle><CardDescription>Manual AI Triggers</CardDescription></CardHeader>
