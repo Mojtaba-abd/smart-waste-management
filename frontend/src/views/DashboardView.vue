@@ -244,22 +244,30 @@ watch(activeRoute, () => { if (currentTab.value === 'map') drawRoute() }, { deep
 
 // --- FIREBASE LISTENERS ---
 onMounted(() => {
+// 1. Listen to Bins (Fixed for String vs Number issue)
   onValue(dbRef(db, 'bins'), (snapshot) => {
     const data = snapshot.val()
     if (data) {
-      bins.value = Object.keys(data).map(key => ({
-        id: key,
-        rawLat: data[key].latitude || 0,
-        rawLng: data[key].longitude || 0,
-        location: `Lat: ${data[key].latitude?.toFixed(4)}, Lng: ${data[key].longitude?.toFixed(4)}`,
-        fillLevel: Math.round(data[key].fill_level || 0),
-        status: getStatus(data[key].fill_level || 0),
-        lastUpdate: timeAgo(data[key].timestamp),
-        timestamp: data[key].timestamp
-      })).sort((a, b) => b.fillLevel - a.fillLevel)
+      bins.value = Object.keys(data).map(key => {
+        // FORCE CONVERT TO NUMBERS
+        const lat = parseFloat(data[key].latitude || 0)
+        const lng = parseFloat(data[key].longitude || 0)
+        const fill = parseFloat(data[key].fill_level || 0)
+
+        return {
+          id: key,
+          rawLat: lat,
+          rawLng: lng,
+          // Now .toFixed() will work because 'lat' is definitely a number
+          location: `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`,
+          fillLevel: Math.round(fill),
+          status: getStatus(fill),
+          lastUpdate: timeAgo(data[key].timestamp),
+          timestamp: data[key].timestamp
+        }
+      }).sort((a, b) => b.fillLevel - a.fillLevel)
     }
   })
-
   onValue(dbRef(db, 'predictions'), (snapshot) => {
     const data = snapshot.val()
     if (data) {
