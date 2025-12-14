@@ -23,7 +23,7 @@ DEPOT_LON = 44.3668
 TIME_THRESHOLD = 12
 
 # Maximum number of bins to visit in one route
-MAX_BINS_PER_ROUTE = 20
+MAX_BINS_PER_ROUTE = 30
 
 
 def init_firebase():
