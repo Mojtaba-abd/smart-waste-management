@@ -1,32 +1,23 @@
 """
-Inference Script
-Loads the trained model, reads current bin states from Firebase,
-computes features, makes predictions, and writes results back to Firebase.
-Designed to run as a cron job every few minutes.
+Inference Module
+Fetches bin data, calculates fill rates based on history,
+and predicts time-to-full.
 """
 
-import pandas as pd
 import numpy as np
-import joblib
+import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, db
-from datetime import datetime
 import time
+import joblib
+from datetime import datetime
 
-# Feature columns (must match training)
-FEATURE_COLS = [
-    "fill_level",
-    "fill_rate",
-    "fill_rate_rolling_mean",
-    "fill_rate_rolling_std",
-    "hour",
-    "weekday",
-    "is_weekend",
-]
+# Configuration
+HISTORY_LIMIT = 10  # Number of past data points to check for fill rate
 
 
 def init_firebase():
-    """Initialize Firebase Admin SDK"""
+    """Initialize Firebase Admin SDK if not already initialized"""
     if not firebase_admin._apps:
         cred = credentials.Certificate("serviceAccountKey.json")
         firebase_admin.initialize_app(
@@ -37,249 +28,175 @@ def init_firebase():
         )
 
 
-def load_model(model_path="models/time_to_full.joblib"):
-    """Load the trained model"""
-    print(f"Loading model from {model_path}...")
-    model = joblib.load(model_path)
-    print("Model loaded successfully")
-    return model
-
-
-def fetch_current_bins():
-    """Fetch current bin states from /bins"""
+def fetch_current_bin_states():
+    """Fetch current state of all bins"""
     print("Fetching current bin states...")
     ref = db.reference("/bins")
-    bins_data = ref.get()
+    data = ref.get()
 
-    if not bins_data:
-        print("No bin data found")
+    if not data:
         return pd.DataFrame()
 
-    # Convert to list of records
     records = []
-    for bin_id, data in bins_data.items():
-        record = {
-            "bin_id": bin_id,
-            "fill_level": data.get("fill_level", 0),
-            "latitude": data.get("latitude", 0),
-            "longitude": data.get("longitude", 0),
-            "timestamp": data.get("timestamp", int(time.time())),
-        }
-        records.append(record)
+    for bin_id, val in data.items():
+        records.append(
+            {
+                "bin_id": bin_id,
+                # FIX: Ensure fill_level is a float
+                "fill_level": float(val.get("fill_level", 0)),
+                "latitude": val.get("latitude", 0),
+                "longitude": val.get("longitude", 0),
+                # FIX: Ensure timestamp is a float
+                "last_updated": float(val.get("timestamp", time.time())),
+            }
+        )
 
     df = pd.DataFrame(records)
     print(f"Fetched {len(df)} bins")
     return df
 
 
-def fetch_recent_history(bin_id, limit=5):
-    """Fetch recent historical readings for a bin"""
+def fetch_bin_history(bin_id):
+    """Fetch historical data for a specific bin"""
+    # Get last N records
     ref = db.reference(f"/history/{bin_id}")
-    history = ref.order_by_key().limit_to_last(limit).get()
+    # Limit to last 10 entries to calculate recent rate
+    data = ref.order_by_key().limit_to_last(HISTORY_LIMIT).get()
 
-    if not history:
-        return []
-
-    records = []
-    for timestamp, data in history.items():
-        record = {"timestamp": int(timestamp), "fill_level": data.get("fill_level", 0)}
-        records.append(record)
-
-    return sorted(records, key=lambda x: x["timestamp"])
+    if not data:
+        return {}
+    return data
 
 
 def compute_fill_rate_from_history(current_fill, current_time, history):
     """
-    Compute fill rate from recent history.
-    Returns fill_rate, rolling_mean, and rolling_std
+    Calculate fill rate (percent per hour) based on history.
+    FIXED: Handles String timestamps from Firebase.
     """
-    if len(history) < 2:
-        # Not enough history, use defaults
-        return 0, 0, 0
+    if not history or len(history) < 2:
+        return 0.5, 0, 0  # Default fallback rate
 
-    # Get last two readings to compute rate
-    prev_reading = history[-1]
-    prev_time = prev_reading["timestamp"]
-    prev_fill = prev_reading["fill_level"]
+    # 1. Convert Dictionary to List of (Timestamp, Fill)
+    points = []
+    for ts_str, data in history.items():
+        try:
+            # FIX: Force convert String timestamp to Float
+            ts = float(ts_str)
+            fill = float(data.get("fill_level", 0))
+            points.append((ts, fill))
+        except ValueError:
+            continue
+
+    # Sort by time
+    points.sort(key=lambda x: x[0])
+
+    if len(points) < 2:
+        return 0.5, 0, 0
+
+    # 2. Calculate simple slope between oldest and newest point in this window
+    start_time, start_fill = points[0]
+    end_time, end_fill = points[-1]
+
+    # Avoid division by zero
+    if end_time == start_time:
+        return 0.5, 0, 0
 
     # Calculate time difference in hours
-    time_diff_hours = (current_time - prev_time) / 3600
+    time_diff_hours = (end_time - start_time) / 3600.0
+    fill_diff = end_fill - start_fill
 
     if time_diff_hours <= 0:
-        return 0, 0, 0
+        return 0.5, 0, 0
 
-    # Calculate fill rate
-    fill_diff = current_fill - prev_fill
-    fill_rate = max(0, fill_diff / time_diff_hours)  # Clip negative rates
+    fill_rate = fill_diff / time_diff_hours
 
-    # Compute rolling statistics from all available history
-    rates = []
-    for i in range(len(history) - 1):
-        t1, f1 = history[i]["timestamp"], history[i]["fill_level"]
-        t2, f2 = history[i + 1]["timestamp"], history[i + 1]["fill_level"]
+    # 3. Sanity check: If rate is negative (bin was emptied), reset to default
+    if fill_rate < 0:
+        fill_rate = 0.5  # Default slow fill rate
 
-        time_diff = (t2 - t1) / 3600
-        if time_diff > 0:
-            rate = max(0, (f2 - f1) / time_diff)
-            rates.append(rate)
-
-    # Add current rate
-    rates.append(fill_rate)
-
-    # Compute rolling statistics
-    if len(rates) >= 3:
-        rolling_mean = np.mean(rates[-3:])
-        rolling_std = np.std(rates[-3:])
-    else:
-        rolling_mean = np.mean(rates)
-        rolling_std = np.std(rates) if len(rates) > 1 else 0
-
-    return fill_rate, rolling_mean, rolling_std
-
-
-def compute_time_features(timestamp):
-    """Extract time-based features from timestamp"""
-    dt = datetime.fromtimestamp(timestamp)
-    hour = dt.hour
-    weekday = dt.weekday()
-    is_weekend = 1 if weekday >= 5 else 0
-
-    return hour, weekday, is_weekend
+    return fill_rate, 0, 0
 
 
 def prepare_features_for_prediction(bins_df):
-    """
-    Prepare features for prediction by fetching history and computing features
-    """
+    """Calculate fill rate for each bin"""
     print("Preparing features for prediction...")
+    current_time = time.time()
 
-    features_list = []
+    predictions = []
 
-    for idx, row in bins_df.iterrows():
+    for _, row in bins_df.iterrows():
         bin_id = row["bin_id"]
         current_fill = row["fill_level"]
-        current_time = row["timestamp"]
 
-        # Fetch recent history
-        history = fetch_recent_history(bin_id, limit=5)
+        # Fetch history for this bin
+        history = fetch_bin_history(bin_id)
 
-        # Compute fill rate features
-        fill_rate, rolling_mean, rolling_std = compute_fill_rate_from_history(
+        # Compute Rate
+        fill_rate, _, _ = compute_fill_rate_from_history(
             current_fill, current_time, history
         )
 
-        # Compute time features
-        hour, weekday, is_weekend = compute_time_features(current_time)
+        # Logic: How many hours until 100%?
+        remaining_capacity = 100.0 - current_fill
 
-        # Build feature vector
-        features = {
-            "bin_id": bin_id,
-            "fill_level": current_fill,
-            "fill_rate": fill_rate,
-            "fill_rate_rolling_mean": rolling_mean,
-            "fill_rate_rolling_std": rolling_std,
-            "hour": hour,
-            "weekday": weekday,
-            "is_weekend": is_weekend,
-            "latitude": row["latitude"],
-            "longitude": row["longitude"],
-        }
+        if remaining_capacity <= 0:
+            time_to_full = 0
+        elif fill_rate <= 0.1:
+            # If filling very slowly, assume a long time (e.g., 24h+)
+            time_to_full = 24.0
+        else:
+            time_to_full = remaining_capacity / fill_rate
 
-        features_list.append(features)
+        # Cap prediction at 48 hours to be realistic
+        if time_to_full > 48:
+            time_to_full = 48.0
 
-    features_df = pd.DataFrame(features_list)
-    print(f"Prepared features for {len(features_df)} bins")
-
-    return features_df
-
-
-def make_predictions(model, features_df):
-    """Make predictions using the trained model"""
-    print("Making predictions...")
-
-    # Extract feature columns for prediction
-    X = features_df[FEATURE_COLS].copy()
-
-    # Handle any NaN or inf values
-    X = X.fillna(0)
-    X = X.replace([np.inf, -np.inf], 0)
-
-    # Make predictions
-    predictions = model.predict(X)
-
-    # Add predictions to dataframe
-    features_df["time_to_full_h"] = predictions
-
-    # Clip predictions to reasonable range (0 to 168 hours = 1 week)
-    features_df["time_to_full_h"] = features_df["time_to_full_h"].clip(0, 168)
-
-    print(
-        f"Predictions complete. Range: {predictions.min():.2f} - {predictions.max():.2f} hours"
-    )
-
-    return features_df
-
-
-def write_predictions_to_firebase(predictions_df):
-    """Write predictions back to Firebase at /predictions/<bin_id>"""
-    print("Writing predictions to Firebase...")
-
-    ref = db.reference("/predictions")
-    current_timestamp = int(time.time())
-
-    predictions_dict = {}
-    for idx, row in predictions_df.iterrows():
-        bin_id = row["bin_id"]
-        predictions_dict[bin_id] = {
-            "time_to_full_h": float(row["time_to_full_h"]),
-            "predicted_at": current_timestamp,
-            "fill_level": float(row["fill_level"]),
-            "fill_rate": float(row["fill_rate"]),
-        }
-
-    # Write all predictions at once
-    ref.set(predictions_dict)
-
-    print(f"Successfully wrote predictions for {len(predictions_dict)} bins")
-
-    # Print summary
-    print("\n=== Prediction Summary ===")
-    print(
-        predictions_df[["bin_id", "fill_level", "time_to_full_h"]].to_string(
-            index=False
+        predictions.append(
+            {
+                "bin_id": bin_id,
+                "fill_level": current_fill,
+                "fill_rate": round(fill_rate, 2),
+                "time_to_full_h": round(time_to_full, 1),
+                "predicted_at": current_time,
+            }
         )
-    )
+
+    return pd.DataFrame(predictions)
+
+
+def update_predictions_in_firebase(predictions_df):
+    """Push results to Firebase"""
+    print("Updating predictions in Firebase...")
+    ref = db.reference("/predictions")
+
+    updates = {}
+    for _, row in predictions_df.iterrows():
+        updates[row["bin_id"]] = {
+            "fill_level": row["fill_level"],
+            "fill_rate": row["fill_rate"],
+            "time_to_full_h": row["time_to_full_h"],
+            "predicted_at": row["predicted_at"],
+        }
+
+    ref.update(updates)
+    print("Predictions updated successfully.")
 
 
 def main():
-    """Main inference pipeline"""
     try:
-        start_time = time.time()
-
-        # Initialize Firebase
         init_firebase()
 
-        # Load model
-        model = load_model()
-
-        # Fetch current bin states
-        bins_df = fetch_current_bins()
-
+        # 1. Get Current Data
+        bins_df = fetch_current_bin_states()
         if bins_df.empty:
-            print("No bins to process")
+            print("No bins found.")
             return
 
-        # Prepare features
-        features_df = prepare_features_for_prediction(bins_df)
+        # 2. Predict logic (Simple Heuristic / Linear Regression)
+        preds_df = prepare_features_for_prediction(bins_df)
 
-        # Make predictions
-        predictions_df = make_predictions(model, features_df)
-
-        # Write predictions to Firebase
-        write_predictions_to_firebase(predictions_df)
-
-        elapsed = time.time() - start_time
-        print(f"\n✓ Inference completed successfully in {elapsed:.2f} seconds")
+        # 3. Save
+        update_predictions_in_firebase(preds_df)
 
     except Exception as e:
         print(f"Error during inference: {e}")
