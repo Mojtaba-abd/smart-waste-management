@@ -1,6 +1,7 @@
 """
-Live Data Simulation Script (FAST MODE)
-Adds specific area assignment to bins.
+Smart Waste Management - Live Data Simulation
+Generates real-time sensor data for demo purposes.
+Simulates bin fill levels, rapid updates, and collection events.
 """
 
 import os
@@ -13,19 +14,16 @@ import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime
 
-# Configuration
-NUM_BINS = 25
-UPDATE_INTERVAL = 1.0  # seconds between updates
-COLLECTION_CHECK_INTERVAL = 20  # seconds between checking for collections
+# --- Configuration ---
+NUM_BINS = 26  # Matches your physical bin count + virtual ones
+UPDATE_INTERVAL = 1.0  # Seconds between sensor readings
+COLLECTION_CHECK_INTERVAL = 20  # Seconds between "truck" visits
 
-# Geographic boundaries (Baghdad area example)
+# Geographic boundaries (Baghdad, Iraq)
 LAT_MIN, LAT_MAX = 33.2, 33.4
 LON_MIN, LON_MAX = 44.3, 44.5
 
-# CHANGED: Define specific collection areas
-AREAS = ["Central", "North", "South", "East", "West"]
-
-# Fill rate profiles (percentage increase per update interval)
+# Fill rate profiles (How fast bins fill up based on location type)
 FILL_PROFILES = {
     "residential_high": (2.0, 4.0),
     "residential_low": (1.0, 2.0),
@@ -38,13 +36,11 @@ FILL_PROFILES = {
 running = True
 bins_state = []
 
-
 def signal_handler(sig, frame):
-    """Handle Ctrl+C gracefully"""
+    """Handle Ctrl+C gracefully to stop the demo"""
     global running
     print("\n\n🛑 Stopping simulation...")
     running = False
-
 
 def init_firebase():
     """Initialize Firebase Admin SDK"""
@@ -57,31 +53,26 @@ def init_firebase():
             },
         )
 
-
 def generate_bins(num_bins):
-    """Generate initial bin states"""
+    """Generate initial bin states with random locations and types"""
     bins = []
     profiles = list(FILL_PROFILES.keys())
 
     for i in range(num_bins):
         bin_id = f"bin_{i+1:03d}"
 
-        # Random location
+        # Random geographic location
         lat = random.uniform(LAT_MIN, LAT_MAX)
         lon = random.uniform(LON_MIN, LON_MAX)
 
-        # CHANGED: Assign a random area
-        area = random.choice(AREAS)
-
-        # Random profile and starting fill level
+        # Random usage profile
         profile = random.choice(profiles)
-        fill_level = random.uniform(0, 60)
+        fill_level = random.uniform(0, 60) # Start with random fill
 
         bin_state = {
             "bin_id": bin_id,
             "latitude": lat,
             "longitude": lon,
-            "area": area,  # ADDED: Area field
             "profile": profile,
             "base_fill_rate": random.uniform(*FILL_PROFILES[profile]),
             "fill_level": fill_level,
@@ -93,112 +84,93 @@ def generate_bins(num_bins):
 
     return bins
 
-
 def calculate_fill_rate_modifier():
-    """Calculate fill rate modifier based on current time"""
+    """Simulate time-of-day impact on waste generation"""
     now = datetime.now()
     hour = now.hour
     weekday = now.weekday()
 
     modifier = 1.0
 
-    # Peak hours (meal times)
+    # Rush Hours (High waste generation)
     if 7 <= hour <= 9 or 12 <= hour <= 14 or 18 <= hour <= 21:
         modifier *= random.uniform(1.3, 1.8)
 
-    # Night hours
+    # Night Time (Low waste generation)
     elif 22 <= hour or hour <= 6:
         modifier *= random.uniform(0.5, 0.8)
 
-    # Weekend variation
+    # Weekend Spike
     if weekday >= 5:
         modifier *= random.uniform(1.1, 1.4)
 
-    # Random variation
-    modifier *= random.uniform(0.85, 1.15)
-
-    return modifier
-
+    return modifier * random.uniform(0.85, 1.15)
 
 def should_collect_bin(bin_state):
-    """Determine if bin should be collected"""
-    if bin_state["fill_level"] >= 98:
-        return True
-    return False
-
+    """Determine if a bin is full enough to require collection"""
+    return bin_state["fill_level"] >= 98
 
 def collect_bin(bin_state):
-    """Simulate bin collection"""
-    bin_state["fill_level"] = random.uniform(0, 5)
+    """Simulate a truck emptying the bin"""
+    bin_state["fill_level"] = random.uniform(0, 5) # Not perfectly empty
     bin_state["last_collection"] = int(time.time())
     bin_state["total_collections"] += 1
     return True
 
-
 def update_bin(bin_state):
-    """Update a single bin's fill level"""
+    """Increment fill level based on profile and time"""
     fill_rate = bin_state["base_fill_rate"] * calculate_fill_rate_modifier()
     bin_state["fill_level"] += fill_rate
     bin_state["fill_level"] = min(100, bin_state["fill_level"])
     return bin_state
 
-
 def write_to_firebase(bin_state, write_history=True):
-    """Write bin data to Firebase"""
+    """Push updates to Firebase Realtime Database"""
     bin_id = bin_state["bin_id"]
     timestamp = int(time.time())
 
-    # Current state to /bins
+    # Update Live State
     bins_ref = db.reference(f"/bins/{bin_id}")
     current_data = {
         "fill_level": round(bin_state["fill_level"], 2),
         "latitude": round(bin_state["latitude"], 6),
         "longitude": round(bin_state["longitude"], 6),
-        "area": bin_state["area"],  # ADDED: Write area to /bins
         "timestamp": timestamp,
     }
     bins_ref.set(current_data)
 
-    # Historical data to /history
+    # Record History (for ML Training)
     if write_history:
         day_key = str(datetime.now().day)
         history_ref = db.reference(f"/history/{day_key}/{bin_id}/{timestamp}")
         history_ref.set(current_data)
 
-
 def print_status(bins_state, collections_this_round):
-    """Print current status of all bins"""
+    """Display a professional dashboard in the terminal"""
     os.system("clear" if sys.platform != "win32" else "cls")
 
     print("=" * 80)
-    print("🚀 FAST LIVE WASTE BIN SIMULATION")
+    print("🚀 TEAM ENKI - LIVE SENSOR SIMULATION")
     print("=" * 80)
-    print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Active Bins: {len(bins_state)}")
-    print(f"Update Interval: {UPDATE_INTERVAL}s")
-    print(f"Collections This Round: {collections_this_round}")
+    print(f"Time: {datetime.now().strftime('%H:%M:%S')} | Update Rate: {UPDATE_INTERVAL}s")
+    print(f"Active Nodes: {len(bins_state)} | Collections Run: {collections_this_round}")
     print("=" * 80)
 
-    # ... (rest of print_status remains the same) ...
-
-    # Sort bins by fill level (highest first)
+    # Sort by fill level (Critical first)
     sorted_bins = sorted(bins_state, key=lambda x: x["fill_level"], reverse=True)
 
-    # Print header
-    print(
-        f"{'Bin ID':<12} {'Fill %':<10} {'Area':<10} {'Profile':<15} {'Collections':<12} {'Status'}"
-    )
+    print(f"{'Bin ID':<10} {'Fill %':<10} {'Status':<15} {'Visual':<25} {'Profile'}")
     print("-" * 80)
 
-    for bin_state in sorted_bins:
+    for bin_state in sorted_bins[:15]: # Show top 15 only to fit screen
         fill_level = bin_state["fill_level"]
 
         if fill_level >= 90:
             status = "🔴 CRITICAL"
         elif fill_level >= 70:
-            status = "🟠 HIGH"
+            status = "🟠 WARNING"
         elif fill_level >= 50:
-            status = "🟡 MEDIUM"
+            status = "🟡 NORMAL"
         else:
             status = "🟢 LOW"
 
@@ -207,44 +179,35 @@ def print_status(bins_state, collections_this_round):
         bar = "█" * filled + "░" * (bar_length - filled)
 
         print(
-            f"{bin_state['bin_id']:<12} "
-            f"{fill_level:>5.1f}% {bar} "
-            f"{bin_state['area']:<10} "  # ADDED: Print Area
-            f"{bin_state['profile']:<15} "
-            f"{bin_state['total_collections']:<12} "
-            f"{status}"
+            f"{bin_state['bin_id']:<10} "
+            f"{fill_level:>5.1f}%     "
+            f"{status:<15} "
+            f"{bar}   "
+            f"{bin_state['profile']}"
         )
 
-    print()
-    print("=" * 80)
+    print("-" * 80)
     print("Press Ctrl+C to stop simulation")
-    print("=" * 80)
-
-
-def print_collection_event(bin_id, fill_level):
-    """Print collection event notification"""
-    print(f"\n🚛 COLLECTION EVENT: {bin_id} collected at {fill_level:.1f}% full")
-
 
 def main():
-    """Main live simulation loop"""
+    """Main execution loop"""
     global running, bins_state
 
     signal.signal(signal.SIGINT, signal_handler)
 
     try:
-        print("🚀 Starting FAST Live Waste Bin Simulation...")
+        print("\n🚀 Initializing Simulation Environment...")
         init_firebase()
-        print("✓ Connected to Firebase")
+        print("✓ Firebase Connected")
 
         bins_state = generate_bins(NUM_BINS)
-        print(f"✓ Generated {NUM_BINS} bins")
+        print(f"✓ {NUM_BINS} Virtual Nodes Generated")
 
-        print("✓ Writing initial states to Firebase...")
+        print("✓ Pushing initial state...")
         for bin_state in bins_state:
             write_to_firebase(bin_state, write_history=True)
 
-        print("✓ Simulation started!")
+        print("✓ Starting Live Loop...")
         time.sleep(1)
 
         iteration = 0
@@ -254,16 +217,20 @@ def main():
             iteration += 1
             collections_this_round = 0
 
+            # Update every bin
             for bin_state in bins_state:
                 current_time = time.time()
+                
+                # Check for "Truck Collection" events periodically
                 if (current_time - last_collection_check) >= COLLECTION_CHECK_INTERVAL:
                     if should_collect_bin(bin_state):
-                        old_fill = bin_state["fill_level"]
                         collect_bin(bin_state)
                         collections_this_round += 1
-                        print_collection_event(bin_state["bin_id"], old_fill)
 
+                # Simulate sensor reading update
                 update_bin(bin_state)
+                
+                # Write to DB (Record history less frequently to save space)
                 write_to_firebase(bin_state, write_history=(iteration % 10 == 0))
 
             if (time.time() - last_collection_check) >= COLLECTION_CHECK_INTERVAL:
@@ -272,12 +239,11 @@ def main():
             print_status(bins_state, collections_this_round)
             time.sleep(UPDATE_INTERVAL)
 
-        print("\n✓ Simulation stopped gracefully")
+        print("\n✓ Simulation stopped gracefully.")
 
     except Exception as e:
-        print(f"\n❌ Error during simulation: {e}")
+        print(f"\n❌ Simulation Error: {e}")
         raise
-
 
 if __name__ == "__main__":
     main()
