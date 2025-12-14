@@ -150,7 +150,7 @@ const updateMapMarkers = () => {
   mapMarkers.value = []
 
   const getIcon = (fill) => {
-    const color = fill >= 90 ? '#ef4444' : (fill >= 70 ? '#f59e0b' : '#10b981')
+    const color = fill >= 80 ? '#ef4444' : (fill >= 60 ? '#f59e0b' : '#10b981')
     return L.divIcon({
       className: 'custom-div-icon',
       html: `<div style="background-color: ${color}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 8px ${color};"></div>`,
@@ -343,17 +343,30 @@ onMounted(() => {
 })
 
 const getPoints = (type, height = 100, width = 100) => {
-  if (chartHistory.value.length === 0) return ""
+  if (chartHistory.value.length < 2) return "" // Need at least 2 points to draw a line
+
   const maxVal = 100
   const stepX = width / (chartHistory.value.length - 1)
+
   return chartHistory.value.map((d, i) => {
-    const val = type === 'actual' ? d.actual : (d.actual + (Math.random() * 10 - 5))
+    // 1. Get raw value
+    let val = type === 'actual' ? d.actual : (d.actual + (Math.random() * 10 - 5))
+
+    // 2. SAFETY: Force it to be a Number
+    val = parseFloat(val)
+    if (isNaN(val)) val = 0
+
+    // 3. SAFETY: Clamp between 0 and 100 so it never shoots up/down
+    if (val > 100) val = 100
+    if (val < 0) val = 0
+
+    // 4. Calculate coordinates
     const x = i * stepX
     const y = height - (val / maxVal) * height
+
     return `${x},${y}`
   }).join(' ')
 }
-
 const getDonutPath = (index, total, counts, radius = 40) => {
   if (total === 0) return ""
   const center = 50
