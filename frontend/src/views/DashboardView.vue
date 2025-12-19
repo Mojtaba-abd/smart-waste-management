@@ -33,27 +33,30 @@ const chartHistory = ref([])
 const predictions = ref([])
 const activeRoute = ref(null)
 const mapInstance = ref(null)
-const mapMarkers = ref([]) // Bin markers
-const routeMarkers = ref([]) // Route stop markers (S, E, 1, 2...)
+const mapMarkers = ref([])
+const routeMarkers = ref([])
 const routePolyline = ref(null)
 
 // --- UI STATE ---
 const isOptimizing = ref(false)
 const isPredicting = ref(false)
-const showRoute = ref(true) // Controls route visibility
+const showRoute = ref(true)
+const currentTime = ref(Date.now() / 1000)
+// NEW: Variable to stop auto-zoom fight
+const hasAutoZoomed = ref(false)
+
+setInterval(() => { currentTime.value = Date.now() / 1000 }, 60000)
 
 // --- COMPUTED STATS ---
 const activeSensors = computed(() => bins.value.length)
 const criticalBins = computed(() => bins.value.filter(b => b.status === 'Critical').length)
 
-// System Load
 const systemLoad = computed(() => {
   if (bins.value.length === 0) return 0
   const totalFill = bins.value.reduce((acc, b) => acc + b.fillLevel, 0)
   return Math.round(totalFill / bins.value.length)
 })
 
-// Status Distribution
 const statusDist = computed(() => {
   const critical = bins.value.filter(b => b.status === 'Critical').length
   const warning = bins.value.filter(b => b.status === 'Warning').length
@@ -61,7 +64,6 @@ const statusDist = computed(() => {
   return [critical, warning, normal]
 })
 
-// Weekly Stats
 const weeklyStats = [
   { day: 'Mon', vol: 45 }, { day: 'Tue', vol: 62 }, { day: 'Wed', vol: 55 },
   { day: 'Thu', vol: 78 }, { day: 'Fri', vol: 90 }, { day: 'Sat', vol: 30 }, { day: 'Sun', vol: 25 }
@@ -75,7 +77,7 @@ const handleOptimize = async () => {
     const data = await response.json()
     if (data.status === 'success') {
         alert("✅ Routes Optimized!")
-        showRoute.value = true // Auto-show route
+        showRoute.value = true
     }
     else alert("❌ Error: " + data.message)
   } catch (error) { alert("❌ Is 'python api.py' running?") }
@@ -107,6 +109,44 @@ const timeAgo = (timestamp) => {
   return Math.floor(seconds / 60) + "m ago"
 }
 
+// REAL ADDRESS GENERATOR (Baghdad Locations)
+const getBinAddress = (id, area) => {
+    const num = parseInt(id.replace(/\D/g, '')) || 0
+
+    // Real Baghdad locations for the demo video
+    const realAddresses = [
+        "College of IT, Main Entrance",       // bin_000
+        "University St, Near Student Club",   // bin_001
+        "Al-Hilla Teaching Hospital, Gate 2", // bin_002
+        "Babylon Resort, Main Hall",          // bin_003
+        "Al-Jadriyah Bridge, South End",      // bin_004
+        "Al-Karrada Dakhil St, Sector 903",   // bin_005
+        "Al-Mansour Mall, Parking Lot B",     // bin_006
+        "Baghdad Tower, Al-Mamoon St",        // bin_007
+        "Al-Mutanabbi Street, Library Zone",  // bin_008
+        "Zayouna, Near Al-Rubaye St",         // bin_009
+        "Al-Dora Expressway, Exit 4",         // bin_010
+        "Green Zone, Checkpoint 3",           // bin_011
+        "Al-Yarmouk Square, Market Side",     // bin_012
+        "Al-Adhamiyah, Abu Hanifa Mosque",    // bin_013
+        "Al-Sadr City, Sector 15",            // bin_014
+        "Palestine Street, Near Monument",    // bin_015
+        "Camp Sarah, Industrial District",    // bin_016
+        "Al-Wazireya, College of Eng.",       // bin_017
+        "Sha'ab Stadium, North Gate",         // bin_018
+        "Al-Bayaa, Wholesale Market",         // bin_019
+        "Al-Saydiya, Commercial St",          // bin_020
+        "Airport Road, Terminal 1 Drop-off",  // bin_021
+        "Abu Nuwas St, River View Park",      // bin_022
+        "Al-Hurriya, Second Intersection",    // bin_023
+        "Al-Ghazaliyah, Main Highway",        // bin_024
+        "Al-Ameriya, Shelter Memorial",       // bin_025
+    ]
+
+    if (num < realAddresses.length) return realAddresses[num]
+    return `${area || 'Central'} District, Sector ${500 + num}`
+}
+
 // --- MAP LOGIC ---
 const initMap = () => {
   if (mapInstance.value) {
@@ -128,7 +168,6 @@ const initMap = () => {
       maxZoom: 20
     }).addTo(mapInstance.value)
 
-    // FIX: Resize listener to prevent drifting markers
     setTimeout(() => { mapInstance.value.invalidateSize() }, 200)
     window.addEventListener('resize', () => {
         if(mapInstance.value) mapInstance.value.invalidateSize()
@@ -139,18 +178,20 @@ const initMap = () => {
   })
 }
 
-// 1. Draw Bin Dots (The Simple Colored Dots)
+// 1. Draw Bin Dots
 const updateMapMarkers = () => {
   if (!mapInstance.value) return
 
-  // FIX: Close popups to prevent "map is null" crash
   mapInstance.value.closePopup()
-
   mapMarkers.value.forEach(marker => marker.remove())
   mapMarkers.value = []
 
-  const getIcon = (fill) => {
-    const color = fill >= 80 ? '#ef4444' : (fill >= 60 ? '#f59e0b' : '#10b981')
+  const getIcon = (fill, isOffline) => {
+    let color = '#10b981' // Green
+    if (isOffline) color = '#9ca3af' // Gray (Offline)
+    else if (fill >= 90) color = '#ef4444' // Red
+    else if (fill >= 70) color = '#f59e0b' // Orange
+
     return L.divIcon({
       className: 'custom-div-icon',
       html: `<div style="background-color: ${color}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 8px ${color};"></div>`,
@@ -163,25 +204,43 @@ const updateMapMarkers = () => {
 
   bins.value.forEach(bin => {
     if (bin.rawLat && bin.rawLng) {
-      const marker = L.marker([bin.rawLat, bin.rawLng], { icon: getIcon(bin.fillLevel) })
-        .bindPopup(`<b>${bin.id}</b><br>Fill: ${bin.fillLevel}%`)
+      const isOffline = (currentTime.value - bin.timestamp) > 300
+
+      const marker = L.marker([bin.rawLat, bin.rawLng], { icon: getIcon(bin.fillLevel, isOffline) })
         .addTo(mapInstance.value)
+
+      const tooltipContent = `
+        <div style="text-align: center;">
+            <div style="font-weight: bold; font-size: 14px; margin-bottom: 2px;">${bin.id}</div>
+            <div style="font-size: 11px; color: #cbd5e1;">${getBinAddress(bin.id, bin.area)}</div>
+            <div style="font-size: 10px; margin-top: 4px; color: ${isOffline ? '#9ca3af' : '#fff'}">
+                ${isOffline ? '⚫ OFFLINE' : `Fill: ${bin.fillLevel}%`}
+            </div>
+        </div>
+      `
+      marker.bindTooltip(tooltipContent, {
+        permanent: false,
+        direction: 'top',
+        className: 'custom-tooltip',
+        offset: [0, -10]
+      })
+
       mapMarkers.value.push(marker)
       bounds.extend([bin.rawLat, bin.rawLng])
     }
   })
 
-  // Fit bounds only if no route is active
-  if ((!activeRoute.value || !showRoute.value) && mapMarkers.value.length > 0) {
+  // FIX: ONLY AUTO-ZOOM ONCE (To let user zoom manually)
+  if (!hasAutoZoomed.value && mapMarkers.value.length > 0) {
     mapInstance.value.fitBounds(bounds, { padding: [50, 50] })
+    hasAutoZoomed.value = true // Prevent future auto-zooms
   }
 }
 
-// 2. Draw Route (Dotted Line + Numbered Markers)
+// 2. Draw Route
 const drawRoute = () => {
   if (!mapInstance.value) return
 
-  // Cleanup old layers
   if (routePolyline.value) {
     routePolyline.value.remove()
     routePolyline.value = null
@@ -189,35 +248,29 @@ const drawRoute = () => {
   routeMarkers.value.forEach(m => m.remove())
   routeMarkers.value = []
 
-  // Check visibility
   if (!showRoute.value || !activeRoute.value) return
 
   const path = activeRoute.value.map(stop => [stop.latitude, stop.longitude])
 
   if (path.length > 0) {
-    // A. Draw the Blue Dotted Line
     routePolyline.value = L.polyline(path, {
         color: '#38bdf8',
         weight: 4,
         opacity: 0.9,
-        dashArray: '10, 5' // <--- Dotted Effect
+        dashArray: '10, 5'
     }).addTo(mapInstance.value)
 
-    // B. Draw Numbered Markers (Start, 1, 2... End)
     activeRoute.value.forEach((stop, index) => {
         let htmlContent = ''
         let size = [24, 24]
 
         if (index === 0) {
-            // START (Green S)
             htmlContent = `<div style="background: #10b981; color: black; font-weight: bold; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 0 10px #10b981;">S</div>`
             size = [30, 30]
         } else if (index === activeRoute.value.length - 1) {
-            // END (Red E)
             htmlContent = `<div style="background: #ef4444; color: white; font-weight: bold; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 0 10px #ef4444;">E</div>`
             size = [30, 30]
         } else {
-            // STOP NUMBER (Blue)
             htmlContent = `<div style="background: #0ea5e9; color: white; font-weight: bold; font-size: 12px; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 0 5px #0ea5e9;">${index}</div>`
         }
 
@@ -229,20 +282,23 @@ const drawRoute = () => {
         })
 
         const marker = L.marker([stop.latitude, stop.longitude], { icon: icon, zIndexOffset: 1000 })
-            .bindPopup(`<div style="color:black"><b>Stop #${index}</b><br>${stop.bin_id || 'Depot'}</div>`)
+            .bindPopup(`<div style="color:black"><b>Stop #${index}</b><br>${getBinAddress(stop.bin_id || 'Depot', null)}</div>`)
             .addTo(mapInstance.value)
 
         routeMarkers.value.push(marker)
     })
 
-    // Zoom to show whole route
-    mapInstance.value.fitBounds(routePolyline.value.getBounds(), { padding: [50, 50] })
+    // Optional: Also auto-zoom to route ONLY if we haven't zoomed yet
+    if (!hasAutoZoomed.value) {
+        mapInstance.value.fitBounds(routePolyline.value.getBounds(), { padding: [50, 50] })
+        hasAutoZoomed.value = true
+    }
   }
 }
 
-// Improved Watchers (Fixes crashing)
 watch(currentTab, (newTab) => {
   if (newTab === 'map') {
+    hasAutoZoomed.value = false // Reset zoom logic on tab switch
     setTimeout(initMap, 100)
   } else {
     if (mapInstance.value) {
@@ -253,7 +309,6 @@ watch(currentTab, (newTab) => {
   }
 })
 
-// Auto-redraw on sidebar toggle to fix size
 watch(isSidebarOpen, () => {
     setTimeout(() => { if(mapInstance.value) mapInstance.value.invalidateSize() }, 300)
 })
@@ -265,7 +320,6 @@ watch(activeRoute, () => { if (currentTab.value === 'map') drawRoute() }, { deep
 
 // --- FIREBASE LISTENERS ---
 onMounted(() => {
-  // 1. Listen to Bins (With String-to-Number fix)
   onValue(dbRef(db, 'bins'), (snapshot) => {
     const data = snapshot.val()
     if (data) {
@@ -278,6 +332,7 @@ onMounted(() => {
           id: key,
           rawLat: lat,
           rawLng: lng,
+          area: data[key].area || null,
           location: `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`,
           fillLevel: Math.round(fill),
           status: getStatus(fill),
@@ -288,7 +343,6 @@ onMounted(() => {
     }
   })
 
-  // 2. Predictions
   onValue(dbRef(db, 'predictions'), (snapshot) => {
     const data = snapshot.val()
     if (data) {
@@ -303,7 +357,6 @@ onMounted(() => {
     }
   })
 
-  // 3. Routes
   onValue(dbRef(db, 'routes'), (snapshot) => {
     const allRoutes = snapshot.val()
     if (allRoutes) {
@@ -314,13 +367,10 @@ onMounted(() => {
       if (routeList.length > 0) {
         const latestRoute = routeList[0]
         activeRoute.value = Array.isArray(latestRoute.stops) ? latestRoute.stops : Object.values(latestRoute.stops)
-      } else {
-        activeRoute.value = null
-      }
+      } else { activeRoute.value = null }
     }
   })
 
-  // 4. History
   onValue(dbRef(db, 'history'), (snapshot) => {
     const data = snapshot.val()
     if (data) {
@@ -343,30 +393,18 @@ onMounted(() => {
 })
 
 const getPoints = (type, height = 100, width = 100) => {
-  if (chartHistory.value.length < 2) return "" // Need at least 2 points to draw a line
-
+  if (chartHistory.value.length < 2) return ""
   const maxVal = 100
   const stepX = width / (chartHistory.value.length - 1)
-
   return chartHistory.value.map((d, i) => {
-    // 1. Get raw value
     let val = type === 'actual' ? d.actual : (d.actual + (Math.random() * 10 - 5))
-
-    // 2. SAFETY: Force it to be a Number
-    val = parseFloat(val)
-    if (isNaN(val)) val = 0
-
-    // 3. SAFETY: Clamp between 0 and 100 so it never shoots up/down
-    if (val > 100) val = 100
-    if (val < 0) val = 0
-
-    // 4. Calculate coordinates
+    val = parseFloat(val); if (isNaN(val)) val = 0; if (val > 100) val = 100; if (val < 0) val = 0;
     const x = i * stepX
     const y = height - (val / maxVal) * height
-
     return `${x},${y}`
   }).join(' ')
 }
+
 const getDonutPath = (index, total, counts, radius = 40) => {
   if (total === 0) return ""
   const center = 50
@@ -441,7 +479,7 @@ const setTab = (tab) => {
         <div v-if="currentTab === 'overview'" class="space-y-8 animate-in fade-in duration-500">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <Card class="bg-gray-900 border-gray-800"><CardHeader class="flex flex-row items-center justify-between pb-2"><CardTitle class="text-sm font-medium text-gray-400">Active Sensors</CardTitle><Cpu class="w-4 h-4 text-emerald-500" /></CardHeader><CardContent><div class="text-2xl font-bold text-white">{{ activeSensors }}</div><p class="text-xs text-gray-500 mt-1">Live from /bins</p></CardContent></Card>
-                <Card class="bg-gray-900 border-gray-800"><CardHeader class="flex flex-row items-center justify-between pb-2"><CardTitle class="text-sm font-medium text-gray-400">Critical (>80%)</CardTitle><AlertTriangle class="w-4 h-4 text-red-500" /></CardHeader><CardContent><div class="text-2xl font-bold text-white">{{ criticalBins }}</div><p class="text-xs text-red-400 mt-1">Attention Required</p></CardContent></Card>
+                <Card class="bg-gray-900 border-gray-800"><CardHeader class="flex flex-row items-center justify-between pb-2"><CardTitle class="text-sm font-medium text-gray-400">Critical (>90%)</CardTitle><AlertTriangle class="w-4 h-4 text-red-500" /></CardHeader><CardContent><div class="text-2xl font-bold text-white">{{ criticalBins }}</div><p class="text-xs text-red-400 mt-1">Attention Required</p></CardContent></Card>
                 <Card class="bg-gray-900 border-gray-800"><CardHeader class="flex flex-row items-center justify-between pb-2"><CardTitle class="text-sm font-medium text-gray-400">Next Optimization</CardTitle><Brain class="w-4 h-4 text-cyan-500" /></CardHeader><CardContent><div class="text-2xl font-bold text-white">Manual</div><p class="text-xs text-cyan-400 mt-1">AI Ready</p></CardContent></Card>
                 <Card class="bg-gray-900 border-gray-800"><CardHeader class="flex flex-row items-center justify-between pb-2"><CardTitle class="text-sm font-medium text-gray-400">System Load</CardTitle><Activity class="w-4 h-4 text-violet-500" /></CardHeader><CardContent><div class="text-2xl font-bold text-white">{{ systemLoad }}%</div><Progress :model-value="systemLoad" class="h-1 mt-2 bg-gray-800" indicator-class="bg-violet-500" /></CardContent></Card>
             </div>
@@ -589,4 +627,14 @@ const setTab = (tab) => {
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
 :deep(.leaflet-popup-content-wrapper) { background-color: #111827; color: white; border-radius: 0.5rem; border: 1px solid #374151; }
 :deep(.leaflet-popup-tip) { background-color: #111827; }
+/* Tooltip Styles */
+:deep(.custom-tooltip) {
+    background-color: rgba(17, 24, 39, 0.95);
+    border: 1px solid #374151;
+    color: white;
+    border-radius: 6px;
+    padding: 4px 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+:deep(.leaflet-tooltip-top:before) { border-top-color: #374151; }
 </style>

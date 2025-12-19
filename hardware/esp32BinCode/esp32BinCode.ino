@@ -2,8 +2,8 @@
 #include <time.h>
 #include "FirebaseESP32.h" 
 
-#define WIFI_SSID "Ali2023"
-#define WIFI_PASSWORD "20242024"
+#define WIFI_SSID "dd"
+#define WIFI_PASSWORD "12341234"
 
 #define FIREBASE_HOST "smart-waste-3d7d0-default-rtdb.europe-west1.firebasedatabase.app"
 #define FIREBASE_AUTH "BsclSHICRx6Ic76lP8O9vbF2JLq2wG4EwFr1Sz93" 
