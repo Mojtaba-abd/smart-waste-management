@@ -42,28 +42,24 @@ const teamMembers = [
   {
     name: "Mujtaba Abdulmuttalib",
     role: "Lead Developer & Architect",
-    image: "/images/team/mujtaba.jpg",
     github: "#",
     linkedin: "#"
   },
   {
     name: "Hussein Ali",
     role: "Hardware & IoT Specialist",
-    image: "/images/team/hussein.jpg",
     github: "#",
     linkedin: "#"
   },
   {
     name: "Mustafa Safa",
     role: "Hardware & IoT Specialist",
-    image: "/images/team/mustafa.jpg",
     github: "#",
     linkedin: "#"
   },
   {
     name: "Zainab Haidar",
     role: "Project Manager & Research",
-    image: "/images/team/zanib.jpg",
     github: "#",
     linkedin: "#"
   }
