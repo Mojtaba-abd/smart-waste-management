@@ -42,8 +42,8 @@ const teamMembers = [
   {
     name: "Mujtaba Abdulmuttalib",
     role: "Lead Developer & Architect",
-    github: "#",
-    linkedin: "#"
+    github: "https://github.com/Mojtaba-abd",
+    linkedin: "https://www.linkedin.com/in/mojtaba-m/"
   },
   {
     name: "Hussein Ali",
@@ -322,8 +322,8 @@ const features = [
               <p class="text-gray-500 text-sm font-medium mb-6 min-h-[40px]">{{ member.role }}</p>
 
               <div class="flex justify-center gap-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
-                <a href="#" class="text-gray-400 hover:text-white transition-colors"><Github class="w-5 h-5"/></a>
-                <a href="#" class="text-gray-400 hover:text-blue-400 transition-colors"><Linkedin class="w-5 h-5"/></a>
+                <a :href="member.github" target="_blank" class="text-gray-400 hover:text-white transition-colors"><Github class="w-5 h-5"/></a>
+                <a :href="member.linkedin" target="_blank" class="text-gray-400 hover:text-blue-400 transition-colors"><Linkedin class="w-5 h-5"/></a>
               </div>
             </CardContent>
           </Card>
