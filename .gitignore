@@ -1,5 +1,7 @@
 # Firebase
 .env.local
+.env
+venv
 serviceAccountKey.json
 firebase-config.json
 node_modules/
